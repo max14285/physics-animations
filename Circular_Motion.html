@@ -2,344 +2,406 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 等速率圓周運動與 Delta V 演示</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- OrbitControls -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    
+    <title>高中物理：等速率圓周運動教學演示 (V4 - 修正加速度位置)</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #0f172a; font-family: 'Noto Sans TC', sans-serif; }
-        #canvas-container { width: 100vw; height: 100vh; }
-        .ui-panel {
-            background: rgba(30, 41, 59, 0.9);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+        :root {
+            --bg-color: #f0f2f5;
+            --panel-bg: #ffffff;
+            --text-color: #333;
+            --primary-color: #007bff;
+            --danger-color: #dc3545;
+            --success-color: #28a745;
         }
-        .legend-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+
+        /* 左側畫布區 */
+        #canvas-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            background-color: #ffffff;
+            background-image: radial-gradient(#e5e5e5 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        canvas {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            background-color: white;
+            border-radius: 8px;
+            cursor: crosshair;
+        }
+
+        /* 右側控制區 */
+        #controls {
+            width: 340px;
+            padding: 20px;
+            background-color: var(--panel-bg);
+            border-left: 1px solid #ddd;
+            overflow-y: auto;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        h2 { margin-top: 0; font-size: 1.2rem; color: #444; border-bottom: 2px solid var(--primary-color); padding-bottom: 10px; }
+        
+        /* 按鈕群組 */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+
+        button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        #btn-play { background-color: var(--primary-color); color: white; }
+        #btn-play.paused { background-color: var(--success-color); }
+        #btn-play:hover { opacity: 0.9; }
+        
+        #btn-reset { background-color: #6c757d; color: white; }
+        #btn-reset:hover { background-color: #5a6268; }
+
+        .control-group {
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #eee;
+        }
+
+        label { display: flex; align-items: center; font-size: 0.9rem; margin-bottom: 8px; cursor: pointer;}
+        input[type="range"] { flex: 1; margin-left: 10px; cursor: pointer; }
+        input[type="checkbox"] { margin-right: 8px; transform: scale(1.2); cursor: pointer; }
+        
+        .value-display {
+            font-family: monospace;
+            font-weight: bold;
+            color: var(--primary-color);
+            min-width: 45px;
+            text-align: right;
             display: inline-block;
-            margin-right: 8px;
         }
-        /* Custom Slider Styling */
-        input[type=range] {
-            -webkit-appearance: none; 
-            background: transparent; 
+
+        /* 顏色標示說明 */
+        .legend-item { display: flex; align-items: center; margin-bottom: 6px; font-size: 0.9rem; }
+        .color-box { width: 14px; height: 14px; margin-right: 10px; border-radius: 3px; }
+
+        /* 數據監控面板 */
+        #data-monitor {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #444;
+            line-height: 1.6;
         }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 16px;
-            width: 16px;
-            border-radius: 50%;
-            background: #38bdf8;
-            cursor: pointer;
-            margin-top: -6px; 
-        }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 4px;
-            cursor: pointer;
-            background: #475569;
-            border-radius: 2px;
-        }
+        .data-row { display: flex; justify-content: space-between; border-bottom: 1px dashed #eee; padding: 2px 0;}
     </style>
 </head>
 <body>
 
-    <!-- Control Panel -->
-    <div class="fixed top-4 left-4 w-80 ui-panel text-white p-6 rounded-xl shadow-2xl z-10">
-        <h1 class="text-xl font-bold mb-4 text-sky-400 border-b border-slate-600 pb-2">等速率圓周運動分析</h1>
-        
-        <div class="space-y-6">
-            <!-- Legend -->
-            <div class="space-y-2 text-sm font-light">
-                <div class="flex items-center"><span class="legend-dot bg-green-500"></span>速度向量 ($\vec{v}$)</div>
-                <div class="flex items-center"><span class="legend-dot bg-red-500"></span>向心力/加速度 ($\vec{F}_c$)</div>
-                <div class="flex items-center"><span class="legend-dot bg-green-500 opacity-40"></span>$\Delta t$ 後的速度 ($\vec{v}'$)</div>
-                <div class="flex items-center"><span class="legend-dot bg-blue-400"></span>速度變化量 ($\Delta \vec{v}$)</div>
-            </div>
+    <div id="canvas-container">
+        <canvas id="simCanvas" width="800" height="600"></canvas>
+    </div>
 
-            <!-- Controls -->
-            <div>
-                <label class="block text-sm font-medium mb-1 text-slate-300">
-                    觀察時間間隔 ($\Delta t$)
-                    <span id="dt-val" class="float-right text-sky-300">0.5s</span>
-                </label>
-                <input type="range" id="dt-slider" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full">
-                <p class="text-xs text-slate-400 mt-1">調整 $\Delta t$ 以觀察 $\Delta \vec{v}$ 方向的變化。當 $\Delta t$ 很小時，$\Delta \vec{v}$ 指向圓心。</p>
-            </div>
+    <div id="controls">
+        <h2>動畫控制</h2>
+        <div class="btn-group">
+            <button id="btn-play">暫停</button>
+            <button id="btn-reset">重置位置</button>
+        </div>
 
-            <div>
-                <label class="block text-sm font-medium mb-1 text-slate-300">
-                    運動速率 ($\omega$)
-                </label>
-                <input type="range" id="speed-slider" min="0" max="2" step="0.1" value="0.5" class="w-full">
-            </div>
+        <h2>物理參數設定</h2>
+        <div class="control-group">
+            <label>速率 (v): <span id="val-speed" class="value-display"></span> m/s</label>
+            <input type="range" id="inp-speed" min="10" max="100" value="40">
+            
+            <label>半徑 (R): <span id="val-radius" class="value-display"></span> m</label>
+            <input type="range" id="inp-radius" min="50" max="250" value="150">
+            
+            <label>質量 (m): <span id="val-mass" class="value-display"></span> kg</label>
+            <input type="range" id="inp-mass" min="1" max="10" value="2">
+            
+            <label>Delta t (作圖用): <span id="val-dt" class="value-display"></span> s</label>
+            <input type="range" id="inp-dt" min="0.1" max="2.0" step="0.1" value="1.0">
+        </div>
 
-            <div class="flex gap-2">
-                <button id="pause-btn" class="flex-1 bg-sky-600 hover:bg-sky-500 text-white py-2 rounded transition-colors font-medium">
-                    暫停 / 播放
-                </button>
-                <button id="reset-camera" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-200 transition-colors">
-                    重置視角
-                </button>
-            </div>
+        <h2>顯示圖層開關</h2>
+        <div class="control-group">
+            <div class="legend-item"><div class="color-box" style="background:#28a745;"></div><label><input type="checkbox" id="show-velocity" checked> 速度 (v)</label></div>
+            <div class="legend-item"><div class="color-box" style="background:#28a745; opacity: 0.5; border:1px dashed #000;"></div><label><input type="checkbox" id="show-next-v"> 下一刻速度 (v')</label></div>
+            <div class="legend-item"><div class="color-box" style="background:#6f42c1;"></div><label><input type="checkbox" id="show-deltav"> 速度變化量 (Δv)</label></div>
+            <hr style="border: 0; border-top: 1px solid #ddd; margin: 5px 0;">
+            <div class="legend-item"><div class="color-box" style="background:#dc3545;"></div><label><input type="checkbox" id="show-force" checked> 向心力 (Fc)</label></div>
+            <div class="legend-item"><div class="color-box" style="background:#fd7e14;"></div><label><input type="checkbox" id="show-acc"> 向心加速度 (ac)</label></div>
+            <hr style="border: 0; border-top: 1px solid #ddd; margin: 5px 0;">
+            <div class="legend-item"><div class="color-box" style="background:#333;"></div><label><input type="checkbox" id="show-radius" checked> 半徑 (R)</label></div>
+            <div class="legend-item"><div class="color-box" style="background:#333;"></div><label><input type="checkbox" id="show-mass"> 質量標示 (m)</label></div>
+        </div>
+
+        <h2>即時數據</h2>
+        <div id="data-monitor" class="control-group">
+            <div class="data-row"><span>向心力 Fc:</span> <span id="calc-fc">0</span> N</div>
+            <div class="data-row"><span>加速度 ac:</span> <span id="calc-ac">0</span> m/s²</div>
+            <div class="data-row"><span>週期 T:</span> <span id="calc-period">0</span> s</div>
         </div>
     </div>
 
-    <!-- Real-time Data -->
-    <div class="fixed bottom-4 left-4 ui-panel text-slate-300 px-4 py-2 rounded-lg text-xs font-mono z-10 hidden sm:block">
-        <p>V(x, z): <span id="debug-v"></span></p>
-        <p>Pos(x, z): <span id="debug-pos"></span></p>
-    </div>
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const centerX = width / 2;
+        const centerY = height / 2;
 
-    <!-- 3D Canvas -->
-    <div id="canvas-container"></div>
+        // 物理與動畫狀態
+        let state = {
+            speed: 40,    
+            radius: 150,  
+            mass: 2,      
+            dt: 1.0,      
+            angle: 0,
+            isRunning: true // 控制動畫是否運行
+        };
 
-<script>
-    // --- Configuration ---
-    const config = {
-        radius: 5,
-        angularSpeed: 0.5, // rad/s
-        dt: 0.5,           // seconds
-        arrowScale: 2.5,   // Visual scaling for vectors
-        isRunning: true
-    };
+        // UI 參考
+        const ui = {
+            btnPlay: document.getElementById('btn-play'),
+            btnReset: document.getElementById('btn-reset'),
+            
+            speed: document.getElementById('inp-speed'),
+            radius: document.getElementById('inp-radius'),
+            mass: document.getElementById('inp-mass'),
+            dt: document.getElementById('inp-dt'),
+            
+            valSpeed: document.getElementById('val-speed'),
+            valRadius: document.getElementById('val-radius'),
+            valMass: document.getElementById('val-mass'),
+            valDt: document.getElementById('val-dt'),
+            
+            calcFc: document.getElementById('calc-fc'),
+            calcAc: document.getElementById('calc-ac'),
+            calcPeriod: document.getElementById('calc-period'),
 
-    // --- State ---
-    let angle = 0;
-    let scene, camera, renderer, controls;
-    let ball;
-    let vectors = {};
-    let pathLine;
-    
-    // --- Initialization ---
-    function init() {
-        const container = document.getElementById('canvas-container');
+            showRadius: document.getElementById('show-radius'),
+            showVelocity: document.getElementById('show-velocity'),
+            showNextV: document.getElementById('show-next-v'),
+            showDeltaV: document.getElementById('show-deltav'),
+            showForce: document.getElementById('show-force'),
+            showAcc: document.getElementById('show-acc'),
+            showMass: document.getElementById('show-mass'),
+        };
 
-        // 1. Scene Setup
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0f172a); // Dark slate background
-        scene.fog = new THREE.Fog(0x0f172a, 20, 50);
+        // 更新數據顯示與狀態
+        function updateState() {
+            state.speed = parseFloat(ui.speed.value);
+            state.radius = parseFloat(ui.radius.value);
+            state.mass = parseFloat(ui.mass.value);
+            state.dt = parseFloat(ui.dt.value);
 
-        // 2. Camera
-        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(10, 12, 12);
-        camera.lookAt(0, 0, 0);
+            ui.valSpeed.textContent = state.speed;
+            ui.valRadius.textContent = state.radius;
+            ui.valMass.textContent = state.mass;
+            ui.valDt.textContent = state.dt.toFixed(1);
 
-        // 3. Renderer
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        container.appendChild(renderer.domElement);
+            // 計算物理量
+            const v = state.speed;
+            const r = state.radius;
+            const m = state.mass;
+            
+            const ac = (v * v) / r;
+            const fc = m * ac;
+            const T = (2 * Math.PI * r) / v;
 
-        // 4. Lighting
-        const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
-        scene.add(ambientLight);
-
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-        dirLight.position.set(5, 10, 5);
-        dirLight.castShadow = true;
-        scene.add(dirLight);
-
-        // 5. Helpers (Grid & Axes)
-        const gridHelper = new THREE.GridHelper(20, 20, 0x334155, 0x1e293b);
-        scene.add(gridHelper);
-        
-        // Center marker
-        const centerGeo = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
-        const centerDot = new THREE.Mesh(new THREE.SphereGeometry(0.1), centerGeo);
-        scene.add(centerDot);
-
-        // Path Circle (Orbit)
-        const curve = new THREE.EllipseCurve(
-            0, 0,            // ax, aY
-            config.radius, config.radius, // xRadius, yRadius
-            0, 2 * Math.PI,  // aStartAngle, aEndAngle
-            false,           // aClockwise
-            0                // aRotation
-        );
-        const points = curve.getPoints(100);
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const material = new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.5 });
-        const ellipse = new THREE.Line(geometry, material);
-        ellipse.rotation.x = -Math.PI / 2; // Rotate to lay flat on XZ plane
-        scene.add(ellipse);
-
-        // 6. The Physics Object (Ball)
-        const ballGeo = new THREE.SphereGeometry(0.4, 32, 32);
-        const ballMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.4, metalness: 0.5 });
-        ball = new THREE.Mesh(ballGeo, ballMat);
-        ball.castShadow = true;
-        scene.add(ball);
-
-        // 7. Vector Arrows Initialization
-        // Origin, Dir, Length, Color, HeadLength, HeadWidth
-        
-        // V1 (Current Velocity) - Green
-        vectors.v1 = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1, 0x22c55e);
-        vectors.v1.line.material.linewidth = 2;
-        scene.add(vectors.v1);
-
-        // V2 (Future Velocity) - Faded Green
-        vectors.v2 = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1, 0x22c55e);
-        // Hack to make arrow transparent
-        vectors.v2.line.material.transparent = true;
-        vectors.v2.line.material.opacity = 0.4;
-        vectors.v2.cone.material.transparent = true;
-        vectors.v2.cone.material.opacity = 0.4;
-        scene.add(vectors.v2);
-
-        // Delta V (Change in Velocity) - Blue
-        // We construct this manually because ArrowHelper assumes origin is a point, but we want to draw tip-to-tip easily
-        vectors.dv = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1, 0x60a5fa);
-        scene.add(vectors.dv);
-
-        // Force/Acceleration - Red
-        vectors.force = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1, 0xef4444);
-        scene.add(vectors.force);
-
-        // 8. Controls
-        controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-
-        // 9. Event Listeners
-        window.addEventListener('resize', onWindowResize);
-        setupUI();
-
-        // Start Loop
-        animate();
-    }
-
-    // --- UI Logic ---
-    function setupUI() {
-        const dtSlider = document.getElementById('dt-slider');
-        const dtVal = document.getElementById('dt-val');
-        const speedSlider = document.getElementById('speed-slider');
-        const pauseBtn = document.getElementById('pause-btn');
-        const resetBtn = document.getElementById('reset-camera');
-
-        dtSlider.addEventListener('input', (e) => {
-            config.dt = parseFloat(e.target.value);
-            dtVal.innerText = config.dt + 's';
-        });
-
-        speedSlider.addEventListener('input', (e) => {
-            config.angularSpeed = parseFloat(e.target.value);
-        });
-
-        pauseBtn.addEventListener('click', () => {
-            config.isRunning = !config.isRunning;
-        });
-
-        resetBtn.addEventListener('click', () => {
-            camera.position.set(10, 12, 12);
-            camera.lookAt(0, 0, 0);
-            controls.reset();
-        });
-    }
-
-    // --- Physics Calculation ---
-    function updatePhysics() {
-        // 1. Update Main Ball Position
-        if (config.isRunning) {
-            angle += config.angularSpeed * 0.016; // Approx 60fps step
-        }
-        
-        const R = config.radius;
-        // Position: (R*cos(theta), 0, R*sin(theta)) - Standard Parametric Circle
-        // Note: Three.js uses (x, y, z). We orbit on X-Z plane, Y is up.
-        const x = R * Math.cos(angle);
-        const z = R * Math.sin(angle);
-        
-        ball.position.set(x, 0, z);
-
-        // 2. Calculate Vectors (Math)
-        
-        // Current Velocity Direction: Tangent to circle (-sin, cos)
-        const v1Dir = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle)).normalize();
-        
-        // Future Velocity Direction (at t + dt)
-        // Future Angle = angle + angularVelocity * dt
-        const futureAngle = angle + (config.angularSpeed * config.dt);
-        const v2Dir = new THREE.Vector3(-Math.sin(futureAngle), 0, Math.cos(futureAngle)).normalize();
-
-        // Centripetal Force Direction: Towards center (opposite to position vector)
-        const forceDir = new THREE.Vector3(-Math.cos(angle), 0, -Math.sin(angle)).normalize();
-
-        // 3. Update Visuals (ArrowHelpers)
-        
-        const vectorLen = 3; // Standard visual length for V vectors
-
-        // Update V1 (Green) - Attached to ball
-        vectors.v1.position.copy(ball.position);
-        vectors.v1.setDirection(v1Dir);
-        vectors.v1.setLength(vectorLen, 0.5, 0.3);
-
-        // Update Force (Red) - Attached to ball
-        vectors.force.position.copy(ball.position);
-        vectors.force.setDirection(forceDir);
-        vectors.force.setLength(2, 0.5, 0.3); // Force vector slightly shorter
-
-        // Update V2 (Faded Green) - Also attached to ball to show comparison at same origin
-        // This represents: "If we draw V(t) and V(t+dt) starting from the same point..."
-        vectors.v2.position.copy(ball.position);
-        vectors.v2.setDirection(v2Dir);
-        vectors.v2.setLength(vectorLen, 0.5, 0.3);
-
-        // Update Delta V (Blue)
-        // Delta V = V2 - V1.
-        // Visually: Connects tip of V1 to tip of V2.
-        
-        // Tip of V1 position relative to world
-        const v1Tip = v1Dir.clone().multiplyScalar(vectorLen).add(ball.position);
-        
-        // Tip of V2 position relative to world
-        const v2Tip = v2Dir.clone().multiplyScalar(vectorLen).add(ball.position);
-
-        // Direction from V1 tip to V2 tip
-        const dvVector = new THREE.Vector3().subVectors(v2Tip, v1Tip);
-        const dvLen = dvVector.length();
-        const dvDir = dvVector.clone().normalize();
-
-        // Position the Delta V arrow at the tip of V1
-        vectors.dv.position.copy(v1Tip);
-        vectors.dv.setDirection(dvDir);
-        
-        // If dt is very small, dvLen approaches 0, avoid warning
-        if (dvLen > 0.01) {
-            vectors.dv.setLength(dvLen, 0.4, 0.2);
-            vectors.dv.visible = true;
-        } else {
-            vectors.dv.visible = false;
+            ui.calcAc.textContent = ac.toFixed(2);
+            ui.calcFc.textContent = fc.toFixed(1);
+            ui.calcPeriod.textContent = (T * 60).toFixed(1); 
         }
 
-        // Debug Text
-        document.getElementById('debug-v').innerText = `${v1Dir.x.toFixed(2)}, ${v1Dir.z.toFixed(2)}`;
-        document.getElementById('debug-pos').innerText = `${x.toFixed(2)}, ${z.toFixed(2)}`;
-    }
+        // 控制功能
+        function toggleAnimation() {
+            state.isRunning = !state.isRunning;
+            if (state.isRunning) {
+                ui.btnPlay.textContent = "暫停";
+                ui.btnPlay.classList.remove("paused");
+            } else {
+                ui.btnPlay.textContent = "繼續播放";
+                ui.btnPlay.classList.add("paused");
+            }
+        }
 
-    function onWindowResize() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    }
+        function resetAnimation() {
+            state.angle = 0;
+            draw(); // 強制重繪
+        }
 
-    function animate() {
-        requestAnimationFrame(animate);
-        updatePhysics();
-        controls.update();
-        renderer.render(scene, camera);
-    }
+        ui.btnPlay.addEventListener('click', toggleAnimation);
+        ui.btnReset.addEventListener('click', resetAnimation);
 
-    // Boot
-    init();
+        // 畫箭頭輔助函式
+        function drawArrow(ctx, fromX, fromY, toX, toY, color, width = 2, label = "", dashed = false) {
+            const headlen = 10; 
+            const dx = toX - fromX;
+            const dy = toY - fromY;
+            const angle = Math.atan2(dy, dx);
+            
+            ctx.save();
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            if(dashed) ctx.setLineDash([5, 5]);
+            ctx.moveTo(fromX, fromY);
+            ctx.lineTo(toX, toY);
+            ctx.stroke();
+            
+            ctx.setLineDash([]);
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.fill();
 
-</script>
+            if (label) {
+                ctx.fillStyle = color;
+                ctx.font = "bold 14px Arial";
+                ctx.fillText(label, toX + 10, toY + 10);
+            }
+            ctx.restore();
+        }
+
+        function draw() {
+            // 清空畫布
+            ctx.clearRect(0, 0, width, height);
+
+            // 更新角度 (只有在運行時)
+            const angularVelocity = state.speed / state.radius; 
+            if (state.isRunning) {
+                state.angle += angularVelocity * 0.02; 
+            }
+
+            // 計算當前位置
+            const x = centerX + state.radius * Math.cos(state.angle);
+            const y = centerY + state.radius * Math.sin(state.angle);
+
+            // 1. 畫圓軌跡
+            ctx.beginPath();
+            ctx.strokeStyle = "#e0e0e0";
+            ctx.lineWidth = 2;
+            ctx.arc(centerX, centerY, state.radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 2. 畫圓心
+            ctx.beginPath();
+            ctx.fillStyle = "#333";
+            ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 3. 畫半徑向量
+            if (ui.showRadius.checked) {
+                drawArrow(ctx, centerX, centerY, x, y, "#333", 1, "R");
+            }
+
+            // 4. 畫物體
+            ctx.beginPath();
+            const particleRadius = 6 + state.mass * 1.5; 
+            ctx.fillStyle = "#007bff";
+            ctx.arc(x, y, particleRadius, 0, Math.PI * 2);
+            ctx.fill();
+            if(ui.showMass.checked) {
+                ctx.fillStyle = "white";
+                ctx.font = "10px Arial";
+                ctx.fillText("m", x-5, y+3);
+            }
+
+            // --- 向量計算準備 ---
+            const vScale = 1.5; 
+            const fScale = 0.05; 
+            const aScale = 2.0;
+
+            const vAngle = state.angle + Math.PI / 2;
+            const vx = state.speed * Math.cos(vAngle);
+            const vy = state.speed * Math.sin(vAngle);
+
+            const nextAngle = state.angle + (angularVelocity * state.dt);
+            const nextVAngle = nextAngle + Math.PI / 2;
+            const nextVx = state.speed * Math.cos(nextVAngle);
+            const nextVy = state.speed * Math.sin(nextVAngle);
+
+            // 5. 畫速度向量 (v)
+            if (ui.showVelocity.checked) {
+                drawArrow(ctx, x, y, x + vx * vScale, y + vy * vScale, "#28a745", 3, "v");
+            }
+
+            // 6. 畫下一刻的速度向量 (v') - 平移到 v 的尾部
+            if (ui.showNextV.checked) {
+                drawArrow(ctx, x, y, x + nextVx * vScale, y + nextVy * vScale, "rgba(40, 167, 69, 0.5)", 2, "v'", true);
+            }
+
+            // 7. 畫 Delta V
+            if (ui.showDeltaV.checked && ui.showVelocity.checked && ui.showNextV.checked) {
+                const tipVx = x + vx * vScale;
+                const tipVy = y + vy * vScale;
+                const tipNextVx = x + nextVx * vScale;
+                const tipNextVy = y + nextVy * vScale;
+                
+                drawArrow(ctx, tipVx, tipVy, tipNextVx, tipNextVy, "#6f42c1", 3, "Δv");
+            }
+
+            // 8. 畫向心力 (Fc) - 紅色，粗
+            if (ui.showForce.checked) {
+                const forceMag = (state.mass * state.speed * state.speed) / state.radius;
+                const forceAngle = state.angle + Math.PI; 
+                const fx = forceMag * Math.cos(forceAngle);
+                const fy = forceMag * Math.sin(forceAngle);
+                
+                // 這裡寬度設為 5，讓它比較粗，當底
+                drawArrow(ctx, x, y, x + fx * fScale, y + fy * fScale, "#dc3545", 5, "Fc");
+            }
+
+            // 9. 畫向心加速度 (ac) - 橘色，細，修正位置與 Fc 重疊
+            if (ui.showAcc.checked) {
+                const accMag = (state.speed * state.speed) / state.radius;
+                const accAngle = state.angle + Math.PI;
+                const ax = accMag * Math.cos(accAngle);
+                const ay = accMag * Math.sin(accAngle);
+                
+                // 去掉了原本的 x+10, y+10 偏移
+                // 寬度設為 2，畫在 Fc 上面
+                drawArrow(ctx, x, y, x + ax * aScale, y + ay * aScale, "#fd7e14", 2, "ac");
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // 綁定數值事件
+        [ui.speed, ui.radius, ui.mass, ui.dt].forEach(el => {
+            el.addEventListener('input', updateState);
+        });
+
+        // 初始化
+        updateState();
+        requestAnimationFrame(draw);
+
+    </script>
 </body>
 </html>
