@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高中物理動畫演示目錄 (自動更新)</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            width: 100%;
+            padding: 2rem 0;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        h1 { margin: 0; font-size: 2rem; }
+        p { margin-top: 0.5rem; opacity: 0.9; }
+
+        .container {
+            width: 90%;
+            max-width: 800px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            padding-bottom: 40px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-decoration: none;
+            color: inherit;
+            border: 1px solid #eee;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+            border-color: var(--primary-color);
+        }
+
+        .card-icon { font-size: 2rem; margin-bottom: 10px; }
+        .card-title { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; color: var(--primary-color); word-break: break-all; }
+        .card-file { font-size: 0.8rem; color: #999; font-family: monospace; }
+        
+        #loading { color: #666; font-style: italic; margin-top: 20px; }
+        .error-msg { color: #dc3545; background: #fff3f3; padding: 10px; border-radius: 5px; text-align: center; display: none; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>高中物理動畫演示</h1>
+        <p>自動掃描 GitHub 目錄</p>
+    </header>
+
+    <div id="loading">正在讀取檔案列表...</div>
+    <div id="error" class="error-msg"></div>
+
+    <div class="container" id="file-list">
+        </div>
+
+    <script>
+        // 設定您的 GitHub 資訊
+        const USERNAME = 'max14285';
+        const REPO_NAME = 'physics-animations';
+        
+        // GitHub API 網址
+        const API_URL = `https://api.github.com/repos/${USERNAME}/${REPO_NAME}/contents/`;
+
+        async function fetchFiles() {
+            const container = document.getElementById('file-list');
+            const loading = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+
+            try {
+                const response = await fetch(API_URL);
+                
+                // 檢查是否因為請求過多被限制
+                if (response.status === 403) {
+                    throw new Error("存取受限：GitHub API 請求次數過多，請稍後再試。");
+                }
+                if (!response.ok) {
+                    throw new Error("無法連結到 GitHub Repository");
+                }
+
+                const data = await response.json();
+                
+                // 清空載入文字
+                loading.style.display = 'none';
+
+                // 過濾出 .html 檔案，並且排除 index.html
+                const htmlFiles = data.filter(file => 
+                    file.name.endsWith('.html') && file.name.toLowerCase() !== 'index.html'
+                );
+
+                if (htmlFiles.length === 0) {
+                    container.innerHTML = "<p>目前沒有找到任何 HTML 動畫檔案。</p>";
+                    return;
+                }
+
+                // 生成卡片
+                htmlFiles.forEach(file => {
+                    const card = document.createElement('a');
+                    card.href = file.name;
+                    card.className = 'card';
+
+                    // 簡單判斷圖示 (3D 的給地球圖案，其他給圓圈)
+                    let icon = '🔵';
+                    if (file.name.toLowerCase().includes('3d')) icon = '🌐';
+                    else if (file.name.toLowerCase().includes('test')) icon = '🧪';
+
+                    // 處理顯示名稱 (把底線換成空白，去掉 .html)
+                    const displayName = file.name
+                        .replace('.html', '')
+                        .replace(/_/g, ' ');
+
+                    card.innerHTML = `
+                        <div class="card-icon">${icon}</div>
+                        <div class="card-title">${displayName}</div>
+                        <div class="card-file">${file.name}</div>
+                    `;
+
+                    container.appendChild(card);
+                });
+
+            } catch (err) {
+                loading.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = "載入失敗：" + err.message + " (建議改用手動連結模式)";
+                console.error(err);
+            }
+        }
+
+        // 執行
+        fetchFiles();
+    </script>
+
+</body>
+</html>
