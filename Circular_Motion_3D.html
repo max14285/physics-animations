@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>3D 高中物理：等速率圓周運動演示</title>
+    <title>3D 高中物理：等速率圓周運動演示 (含標籤)</title>
     <style>
         :root {
             --bg-color: #f0f2f5;
@@ -27,11 +27,11 @@
         #canvas-container {
             flex: 1;
             position: relative;
-            background-color: #000; /* 3D 背景通常用深色較顯眼，也可改白 */
+            background-color: #111;
             overflow: hidden;
         }
 
-        /* 右側控制區 (沿用 V4 設計) */
+        /* 右側控制區 */
         #controls {
             width: 340px;
             padding: 20px;
@@ -77,6 +77,7 @@
             border-radius: 5px;
             pointer-events: none;
             font-size: 0.85rem;
+            line-height: 1.5;
         }
     </style>
     
@@ -87,6 +88,7 @@
 
     <div id="canvas-container">
         <div id="instruction-overlay">
+            <b>操作說明：</b><br>
             左鍵：旋轉視角<br>
             滾輪：縮放<br>
             右鍵：平移
@@ -174,91 +176,126 @@
         // --- Three.js 初始化 ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x222222); // 深灰背景
+        scene.background = new THREE.Color(0x222222);
         
-        // 增加網格輔助
+        // 網格
         const gridHelper = new THREE.GridHelper(800, 20, 0x444444, 0x333333);
         scene.add(gridHelper);
 
         // 相機
-        const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 2000);
-        camera.position.set(0, 300, 400); // 設置初始視角
+        const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 3000);
+        camera.position.set(0, 400, 400); 
         
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(container.clientWidth, container.clientHeight);
         renderer.shadowMap.enabled = true;
         container.appendChild(renderer.domElement);
 
-        // 軌道控制器 (滑鼠操作)
+        // 控制器
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
 
         // 燈光
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
         dirLight.position.set(100, 200, 100);
-        dirLight.castShadow = true;
         scene.add(dirLight);
 
+        // --- 製作文字標籤的輔助函式 (Sprite) ---
+        function makeTextSprite(message, colorStr, fontsize=40) {
+            const fontface = "Arial";
+            const borderThickness = 0;
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            
+            // 設置字體以測量寬度
+            context.font = "Bold " + fontsize + "px " + fontface;
+            const metrics = context.measureText(message);
+            const textWidth = metrics.width;
+
+            // 調整畫布大小 (稍微留白)
+            canvas.width = textWidth + 20;
+            canvas.height = fontsize + 20;
+
+            // 清空並重設字體屬性
+            context.clearRect(0,0, canvas.width, canvas.height);
+            context.font = "Bold " + fontsize + "px " + fontface;
+            context.fillStyle = colorStr;
+            context.textAlign = "center";
+            context.textBaseline = "middle";
+
+            // 畫文字
+            context.fillText(message, canvas.width / 2, canvas.height / 2);
+
+            // 建立貼圖
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            
+            // 調整 Sprite 的縮放比例，讓它在 3D 空間中看起來大小適中
+            // 根據 canvas 比例調整長寬
+            const scaleFactor = 0.8; // 整體縮放係數
+            sprite.scale.set((canvas.width / fontsize) * 20 * scaleFactor, 20 * scaleFactor, 1);
+            
+            return sprite;
+        }
+
         // --- 建立 3D 物件 ---
-        
-        // 1. 軌跡圓環 (Torus)
-        const trackGeometry = new THREE.TorusGeometry(state.radius, 1, 16, 100);
-        // 旋轉90度讓它躺在 X-Z 平面上
+        // 軌跡圓環
+        const trackGeometry = new THREE.TorusGeometry(state.radius, 1, 32, 100);
         trackGeometry.rotateX(Math.PI / 2); 
         const trackMaterial = new THREE.MeshBasicMaterial({ color: 0x666666 });
         const trackMesh = new THREE.Mesh(trackGeometry, trackMaterial);
         scene.add(trackMesh);
 
-        // 2. 圓心
-        const centerGeometry = new THREE.SphereGeometry(3, 16, 16);
-        const centerMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        const centerMesh = new THREE.Mesh(centerGeometry, centerMaterial);
+        // 圓心
+        const centerMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(3, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
         scene.add(centerMesh);
 
-        // 3. 質點 (球體)
-        const ballGeometry = new THREE.SphereGeometry(10, 32, 32);
-        const ballMaterial = new THREE.MeshStandardMaterial({ color: 0x007bff, metalness: 0.3, roughness: 0.4 });
-        const ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
-        ballMesh.castShadow = true;
+        // 質點
+        const ballMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(10, 32, 32),
+            new THREE.MeshStandardMaterial({ color: 0x007bff, metalness: 0.3, roughness: 0.4 })
+        );
         scene.add(ballMesh);
 
-        // --- 箭頭管理 (ArrowHelper) ---
-        // 我們預先建立 ArrowHelper，然後在 loop 中更新它們的長度與方向
-        // ArrowHelper(dir, origin, length, color, headLength, headWidth)
-        
-        function createArrow(color, hexColor) {
-            const arrow = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 10, color);
-            return arrow;
+        // --- 箭頭與標籤管理 ---
+        function createArrow(color) {
+            return new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 10, color);
         }
 
-        const arrows = {
-            radius: createArrow(0xffffff),   // 白
-            velocity: createArrow(0x28a745), // 綠
-            nextV: createArrow(0x28a745),    // 綠 (半透明難以實作，用原色代替，或者用不同材質，這裡簡化使用)
-            deltaV: createArrow(0x6f42c1),   // 紫
-            force: createArrow(0xdc3545),    // 紅
-            acc: createArrow(0xfd7e14)       // 橘
+        const items = {
+            radius: { arrow: createArrow(0xffffff), label: makeTextSprite("R", "#ffffff"), active: true },
+            velocity: { arrow: createArrow(0x28a745), label: makeTextSprite("v", "#28a745"), active: true },
+            nextV: { arrow: createArrow(0x28a745), label: makeTextSprite("v'", "#88ffaa"), active: false }, // 淺綠色區分
+            deltaV: { arrow: createArrow(0x6f42c1), label: makeTextSprite("Δv", "#a070ff"), active: false },
+            force: { arrow: createArrow(0xdc3545), label: makeTextSprite("Fc", "#ff5555"), active: true },
+            acc: { arrow: createArrow(0xfd7e14), label: makeTextSprite("ac", "#fd7e14"), active: false },
+            mass: { arrow: null, label: makeTextSprite("m", "#00aaff"), active: false } // 質量只有標籤
         };
 
-        // 將所有箭頭加入場景
-        Object.values(arrows).forEach(a => scene.add(a));
-        
-        // 為了讓 ghost velocity 區分，我們改變它的材質為半透明
-        // Three.js ArrowHelper 由 line 和 cone 組成
-        function setArrowOpacity(arrow, opacity) {
-            arrow.line.material.transparent = true;
-            arrow.line.material.opacity = opacity;
-            arrow.cone.material.transparent = true;
-            arrow.cone.material.opacity = opacity;
-        }
-        setArrowOpacity(arrows.nextV, 0.4);
+        // 加入場景
+        Object.values(items).forEach(item => {
+            if(item.arrow) {
+                scene.add(item.arrow);
+                // 特殊處理 NextV 的透明度
+                if(item === items.nextV) {
+                   // ArrowHelper 包含 line 和 cone
+                   item.arrow.line.material.transparent = true;
+                   item.arrow.line.material.opacity = 0.4;
+                   item.arrow.cone.material.transparent = true;
+                   item.arrow.cone.material.opacity = 0.4;
+                }
+            }
+            if(item.label) scene.add(item.label);
+        });
 
 
         // --- 更新邏輯 ---
-
         function updateState() {
             state.speed = parseFloat(ui.speed.value);
             state.radius = parseFloat(ui.radius.value);
@@ -270,39 +307,28 @@
             ui.valMass.textContent = state.mass;
             ui.valDt.textContent = state.dt.toFixed(1);
 
-            // 更新軌跡大小 (重建 Geometry 比較簡單，但效能較差，這邊用 scale)
-            // 初始半徑是 1 (因為初始化 TorusGeometry 時我們需要一個初始值，但為了動態調整，我們可以直接用 scale)
-            // 更正：上面初始化 Torus 是用 state.radius。
-            // 為了支援動態半徑，我們每次重建 Torus 有點浪費，不如只畫線。
-            // 但為了視覺效果，我們用 scale 更新 trackMesh
-            // 不過 scale 會把線變粗。比較好的做法是只更新 ball 和箭頭，軌跡圖形更新比較麻煩，這裡簡化處理：
-            // 我們移除舊的 trackMesh，建立新的
-            
+            // 更新軌跡大小
             scene.remove(trackMesh);
-            const newTrackGeo = new THREE.TorusGeometry(state.radius, 1, 16, 100);
+            const newTrackGeo = new THREE.TorusGeometry(state.radius, 1, 32, 100);
             newTrackGeo.rotateX(Math.PI / 2);
-            trackMesh.geometry.dispose(); // 釋放記憶體
+            trackMesh.geometry.dispose();
             trackMesh.geometry = newTrackGeo;
             scene.add(trackMesh);
 
             // 計算數據
-            const v = state.speed;
-            const r = state.radius;
-            const m = state.mass;
-            const ac = (v*v)/r;
-            const fc = m*ac;
-            const T = (2*Math.PI*r)/v;
+            const ac = (state.speed*state.speed)/state.radius;
+            const fc = state.mass*ac;
+            const T = (2*Math.PI*state.radius)/state.speed;
 
             ui.calcAc.textContent = ac.toFixed(2);
             ui.calcFc.textContent = fc.toFixed(1);
             ui.calcPeriod.textContent = (T*60).toFixed(1);
 
-            // 更新球體大小 (隨質量)
+            // 更新球體大小
             const scale = 1 + (state.mass - 1) * 0.2;
             ballMesh.scale.set(scale, scale, scale);
         }
 
-        // 事件綁定
         [ui.speed, ui.radius, ui.mass, ui.dt].forEach(el => el.addEventListener('input', updateState));
         
         ui.btnPlay.addEventListener('click', () => {
@@ -310,132 +336,130 @@
             ui.btnPlay.textContent = state.isRunning ? "暫停" : "繼續播放";
             ui.btnPlay.classList.toggle("paused", !state.isRunning);
         });
-        
-        ui.btnReset.addEventListener('click', () => {
-            state.angle = 0;
-            // 也可以重置 camera
-            // camera.position.set(0, 300, 400);
-            // controls.update();
-        });
-
-        // 視窗大小改變
+        ui.btnReset.addEventListener('click', () => state.angle = 0);
         window.addEventListener('resize', () => {
             camera.aspect = container.clientWidth / container.clientHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(container.clientWidth, container.clientHeight);
         });
 
-
         // --- 動畫迴圈 ---
         const vScale = 1.5; 
-        const fScale = 0.05; 
+        const fScale = 0.5; 
         const aScale = 2.0;
 
         function animate() {
             requestAnimationFrame(animate);
-            
-            controls.update(); // 軌道控制器更新
+            controls.update();
 
-            // 更新角度
             const angularVelocity = state.speed / state.radius;
             if (state.isRunning) {
-                state.angle += angularVelocity * 0.02; // 0.02 是模擬的時間步長
+                state.angle += angularVelocity * 0.02; 
             }
 
-            // 計算位置 (X-Z 平面)
-            // x = r * cos, z = r * sin
             const x = state.radius * Math.cos(state.angle);
             const z = state.radius * Math.sin(state.angle);
             
-            // 更新球位置
             ballMesh.position.set(x, 0, z);
 
-            // 準備向量計算
             const posVec = new THREE.Vector3(x, 0, z);
             const centerVec = new THREE.Vector3(0, 0, 0);
 
-            // 當前速度方向 (切線)
-            // (-sin, 0, cos)
+            // 速度方向
             const dirV = new THREE.Vector3(-Math.sin(state.angle), 0, Math.cos(state.angle)).normalize();
             const vecV = dirV.clone().multiplyScalar(state.speed);
 
-            // 下一刻
+            // Next V
             const nextAngle = state.angle + (angularVelocity * state.dt);
             const dirNextV = new THREE.Vector3(-Math.sin(nextAngle), 0, Math.cos(nextAngle)).normalize();
             const vecNextV = dirNextV.clone().multiplyScalar(state.speed);
 
-
-            // --- 更新箭頭顯示狀態與幾何 ---
-
-            // Helper: updateArrow(arrowObj, origin, direction, length, visible)
-            function updateArrow(arrow, origin, direction, length, visible) {
-                arrow.visible = visible;
-                if(visible) {
-                    arrow.position.copy(origin);
-                    arrow.setDirection(direction);
-                    arrow.setLength(length, 10, 6); // headLength, headWidth
+            // Helper to update arrow and label
+            function updateItem(item, origin, direction, length, show, labelPosOffset = null) {
+                // Update Arrow
+                if (item.arrow) {
+                    item.arrow.visible = show;
+                    if(show) {
+                        item.arrow.position.copy(origin);
+                        item.arrow.setDirection(direction);
+                        item.arrow.setLength(length, 10, 6);
+                    }
+                }
+                
+                // Update Label
+                if (item.label) {
+                    item.label.visible = show;
+                    if (show) {
+                        // 預設標籤位置在箭頭尖端
+                        let pos = origin.clone().add(direction.clone().multiplyScalar(length));
+                        
+                        // 如果有指定 Offset 邏輯 (例如半徑標籤在中間)
+                        if (labelPosOffset) {
+                            pos = labelPosOffset;
+                        } else {
+                            // 預設稍微往上浮一點，避免被箭頭擋住
+                            pos.add(new THREE.Vector3(0, 5, 0));
+                        }
+                        item.label.position.copy(pos);
+                    }
                 }
             }
 
             // 1. 半徑 (R)
-            if (ui.showRadius.checked) {
-                // 從原點指向球
-                const dir = posVec.clone().normalize();
-                updateArrow(arrows.radius, centerVec, dir, state.radius - 12, true); // -12 避免插進球裡
-            } else { arrows.radius.visible = false; }
+            const showR = ui.showRadius.checked;
+            const dirR = posVec.clone().normalize();
+            // 標籤位置：半徑的一半處，並稍微往上
+            const labelPosR = centerVec.clone().add(dirR.clone().multiplyScalar(state.radius / 2)).add(new THREE.Vector3(0, 5, 0));
+            updateItem(items.radius, centerVec, dirR, state.radius - 12, showR, labelPosR);
 
             // 2. 速度 (V)
-            // 從球出發
-            if (ui.showVelocity.checked) {
-                updateArrow(arrows.velocity, posVec, dirV, state.speed * vScale, true);
-            } else { arrows.velocity.visible = false; }
+            updateItem(items.velocity, posVec, dirV, state.speed * vScale, ui.showVelocity.checked);
 
-            // 3. 下一刻速度 (V')
-            // 重點：平移到球的位置 (Ghost)
-            if (ui.showNextV.checked) {
-                updateArrow(arrows.nextV, posVec, dirNextV, state.speed * vScale, true);
-            } else { arrows.nextV.visible = false; }
+            // 3. Next V (V')
+            updateItem(items.nextV, posVec, dirNextV, state.speed * vScale, ui.showNextV.checked);
 
             // 4. Delta V
-            if (ui.showDeltaV.checked && ui.showVelocity.checked && ui.showNextV.checked) {
-                // 起點：V 的箭頭尖端
-                const tipV = posVec.clone().add(vecV.clone().multiplyScalar(vScale));
-                // 終點：V' 的箭頭尖端
-                const tipNextV = posVec.clone().add(vecNextV.clone().multiplyScalar(vScale));
-                
-                // 向量差方向
+            const showDelta = ui.showDeltaV.checked && ui.showVelocity.checked && ui.showNextV.checked;
+            let tipV, tipNextV; // 定義在 scope 外以便傳入
+            
+            if (showDelta) {
+                tipV = posVec.clone().add(vecV.clone().multiplyScalar(vScale));
+                tipNextV = posVec.clone().add(vecNextV.clone().multiplyScalar(vScale));
                 const diffVec = new THREE.Vector3().subVectors(tipNextV, tipV);
                 const diffLen = diffVec.length();
                 const diffDir = diffVec.normalize();
-
-                updateArrow(arrows.deltaV, tipV, diffDir, diffLen, true);
-            } else { arrows.deltaV.visible = false; }
-
-            // 5. 向心力 (Fc)
-            // 指向圓心
-            if (ui.showForce.checked) {
-                const forceMag = (state.mass * state.speed * state.speed) / state.radius;
-                const dirToCenter = posVec.clone().negate().normalize();
-                updateArrow(arrows.force, posVec, dirToCenter, forceMag * fScale, true);
-            } else { arrows.force.visible = false; }
-
-            // 6. 向心加速度 (ac)
-            // 指向圓心，為了避免重疊，將其 Y 軸稍微抬高
-            if (ui.showAcc.checked) {
-                const accMag = (state.speed * state.speed) / state.radius;
-                const dirToCenter = posVec.clone().negate().normalize();
-                // 偏移起點 Y + 5
-                const offsetOrigin = posVec.clone().add(new THREE.Vector3(0, 5, 0));
                 
-                updateArrow(arrows.acc, offsetOrigin, dirToCenter, accMag * aScale, true);
-            } else { arrows.acc.visible = false; }
+                // 標籤在 DeltaV 的中間
+                const labelPosD = tipV.clone().add(diffDir.clone().multiplyScalar(diffLen / 2)).add(new THREE.Vector3(0, 5, 0));
+                
+                updateItem(items.deltaV, tipV, diffDir, diffLen, true, labelPosD);
+            } else {
+                updateItem(items.deltaV, centerVec, new THREE.Vector3(1,0,0), 0, false);
+            }
 
-            // 質量文字標籤 (3D中顯示文字較麻煩，這裡簡化：僅用球大小代表質量)
-            
+            // 5. Force (Fc)
+            const forceMag = (state.mass * state.speed * state.speed) / state.radius;
+            const dirToCenter = posVec.clone().negate().normalize();
+            updateItem(items.force, posVec, dirToCenter, forceMag * fScale, ui.showForce.checked);
+
+            // 6. Acc (ac)
+            const accMag = (state.speed * state.speed) / state.radius;
+            // 起點抬高 y=15 (比之前高一點)，錯開 Fc
+            const originAc = posVec.clone().add(new THREE.Vector3(0, 15, 0)); 
+            updateItem(items.acc, originAc, dirToCenter, accMag * aScale, ui.showAcc.checked);
+
+            // 7. Mass (m)
+            // 只要顯示標籤在球旁邊
+            if (ui.showMass.checked) {
+                items.mass.label.visible = true;
+                items.mass.label.position.copy(posVec).add(new THREE.Vector3(0, 15, 0));
+            } else {
+                items.mass.label.visible = false;
+            }
+
             renderer.render(scene, camera);
         }
 
-        // 啟動
         updateState();
         animate();
 
