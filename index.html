@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>高中物理動畫演示目錄 (自動更新)</title>
+    <title>廣義來說物理動畫</title>
     <style>
         :root {
             --primary-color: #007bff;
@@ -132,18 +132,12 @@
                     card.href = file.name;
                     card.className = 'card';
 
-                    // 簡單判斷圖示 (3D 的給地球圖案，其他給圓圈)
-                    let icon = '🔵';
-                    if (file.name.toLowerCase().includes('3d')) icon = '🌐';
-                    else if (file.name.toLowerCase().includes('test')) icon = '🧪';
-
                     // 處理顯示名稱 (把底線換成空白，去掉 .html)
                     const displayName = file.name
                         .replace('.html', '')
                         .replace(/_/g, ' ');
 
                     card.innerHTML = `
-                        <div class="card-icon">${icon}</div>
                         <div class="card-title">${displayName}</div>
                         <div class="card-file">${file.name}</div>
                     `;
