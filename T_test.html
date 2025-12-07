@@ -3,36 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>T檢定視覺化模擬器：全方位版</title>
+    <title>T檢定模擬器：不等變異版 (Welch's Test)</title>
     <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jstat/1.9.6/jstat.min.js"></script>
     <style>
         body { font-family: "Microsoft JhengHei", Arial, sans-serif; background-color: #f4f4f9; padding: 20px; max-width: 1000px; margin: 0 auto; }
         h2 { text-align: center; color: #333; }
         .container { display: flex; flex-wrap: wrap; gap: 20px; }
-        .controls { flex: 1; min-width: 300px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .controls { flex: 1; min-width: 320px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .charts { flex: 2; min-width: 300px; }
-        .control-group { margin-bottom: 20px; }
-        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        .control-group { margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+        .control-group:last-child { border-bottom: none; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; }
         input[type=range] { width: 100%; cursor: pointer; }
-        .value-display { float: right; color: #007bff; }
+        .value-display { float: right; color: #007bff; font-weight: bold; }
         .radio-group { display: flex; gap: 15px; margin-top: 5px; flex-wrap: wrap;}
         .sub-option { margin-left: 20px; margin-top: 10px; padding: 10px; background: #f8f9fa; border-left: 3px solid #007bff; display: none; }
-        .result-box { margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 5px; text-align: center; }
+        .result-box { margin-top: 10px; padding: 15px; background: #e9ecef; border-radius: 5px; text-align: center; }
         .result-text { font-size: 1.2em; font-weight: bold; }
         .pass { color: #28a745; }
         .fail { color: #dc3545; }
-        .note { font-size: 0.9em; color: #666; margin-top: 5px; line-height: 1.4; }
+        .note { font-size: 0.85em; color: #666; margin-top: 5px; line-height: 1.4; }
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; color: white;}
+        .badge-a { background-color: #888; }
+        .badge-b { background-color: #007bff; }
     </style>
 </head>
 <body>
 
-    <h2>T 檢定視覺化：正負差異與檢定方向</h2>
+    <h2>T 檢定模擬器：不等變異與 Welch's Test</h2>
 
     <div class="container">
         <div class="controls">
             <div class="control-group">
-                <label>Step 1: 選擇檢定類型</label>
+                <label>Step 1: 檢定方向 (Tails)</label>
                 <div class="radio-group">
                     <label><input type="radio" name="tails" value="2" checked onchange="toggleDirection()"> 雙尾 (Two-tailed)</label>
                     <label><input type="radio" name="tails" value="1" onchange="toggleDirection()"> 單尾 (One-tailed)</label>
@@ -41,33 +45,35 @@
                 <div id="direction-panel" class="sub-option">
                     <label>單尾方向：</label>
                     <div class="radio-group">
-                        <label><input type="radio" name="direction" value="right" checked onchange="update()"> 右尾 (驗證 B > A)</label>
-                        <label><input type="radio" name="direction" value="left" onchange="update()"> 左尾 (驗證 B < A)</label>
+                        <label><input type="radio" name="direction" value="right" checked onchange="update()"> 右尾 (B > A)</label>
+                        <label><input type="radio" name="direction" value="left" onchange="update()"> 左尾 (B < A)</label>
                     </div>
                 </div>
-                <p class="note" id="tail-desc">設定說明...</p>
             </div>
-
-            <hr>
 
             <div class="control-group">
                 <label>平均值差異 (B - A)：<span id="val-diff" class="value-display">0.0</span></label>
                 <input type="range" id="diff" min="-5" max="5" step="0.1" value="0.0" oninput="update()">
-                <p class="note">往右拉：B 比 A 大 (正值)<br>往左拉：B 比 A 小 (負值)</p>
             </div>
 
             <div class="control-group">
-                <label>標準差 (SD)：<span id="val-sd" class="value-display">1.5</span></label>
-                <input type="range" id="sd" min="0.5" max="5" step="0.1" value="1.5" oninput="update()">
+                <label><span class="badge badge-a">A組</span> 標準差 (SD A)：<span id="val-sda" class="value-display">1.0</span></label>
+                <input type="range" id="sda" min="0.5" max="5" step="0.1" value="1.0" oninput="update()">
+                
+                <label style="margin-top:15px;"><span class="badge badge-b">B組</span> 標準差 (SD B)：<span id="val-sdb" class="value-display">3.0</span></label>
+                <input type="range" id="sdb" min="0.5" max="5" step="0.1" value="3.0" oninput="update()">
+                
+                <p class="note" id="sd-note">目前狀態：不等變異 (Unequal Variance)</p>
             </div>
 
             <div class="control-group">
-                <label>樣本數 (N)：<span id="val-n" class="value-display">30</span></label>
+                <label>樣本數 (N，兩組假設相同)：<span id="val-n" class="value-display">30</span></label>
                 <input type="range" id="n" min="5" max="100" step="1" value="30" oninput="update()">
             </div>
 
             <div class="result-box">
                 <div>T 值 (T-score): <span id="res-t" style="font-weight:bold">0.00</span></div>
+                <div>自由度 (df): <span id="res-df" style="font-weight:bold">0.0</span> <span style="font-size:0.8em; color:#666">(Welch修正)</span></div>
                 <div>P 值 (P-value): <span id="res-p" style="font-weight:bold">0.00</span></div>
                 <div id="res-text" class="result-text">計算中...</div>
             </div>
@@ -83,103 +89,104 @@
         function toggleDirection() {
             const tails = parseInt(document.querySelector('input[name="tails"]:checked').value);
             const panel = document.getElementById('direction-panel');
-            // 如果是單尾，顯示方向選擇面板
             panel.style.display = (tails === 1) ? 'block' : 'none';
             update();
         }
 
         function update() {
-            // 1. 獲取輸入
+            // 獲取輸入
             const tails = parseInt(document.querySelector('input[name="tails"]:checked').value);
             const diff = parseFloat(document.getElementById('diff').value);
-            const sd = parseFloat(document.getElementById('sd').value);
+            const sdA = parseFloat(document.getElementById('sda').value); // A組 SD
+            const sdB = parseFloat(document.getElementById('sdb').value); // B組 SD
             const n = parseInt(document.getElementById('n').value);
-            
-            // 獲取單尾方向 (right 或 left)
             const direction = document.querySelector('input[name="direction"]:checked').value;
 
             // 更新數值顯示
             document.getElementById('val-diff').textContent = diff;
-            document.getElementById('val-sd').textContent = sd;
+            document.getElementById('val-sda').textContent = sdA;
+            document.getElementById('val-sdb').textContent = sdB;
             document.getElementById('val-n').textContent = n;
 
-            // 更新文字說明
-            const descLabel = document.getElementById('tail-desc');
-            if (tails === 2) {
-                descLabel.innerHTML = "雙尾：不論變大或變小，只要差異夠大就算顯著。<br>拒絕域在兩側 (紅區)。";
+            // 判斷是否為不等變異
+            const sdNote = document.getElementById('sd-note');
+            if (Math.abs(sdA - sdB) < 0.2) {
+                sdNote.innerHTML = "目前狀態：接近等變異 (Equal Variance) <br>兩座山胖瘦差不多。";
             } else {
-                descLabel.innerHTML = direction === 'right' 
-                    ? "右尾：只想證明 B 顯著<b>大於</b> A。拒絕域在右側。"
-                    : "左尾：只想證明 B 顯著<b>小於</b> A。拒絕域在左側。";
+                sdNote.innerHTML = "目前狀態：<b>不等變異 (Unequal Variance)</b> <br>一座山瘦、一座山胖。使用 Welch's Test 公式。";
             }
 
-            // 2. 統計計算
-            // A組 Mean=0, B組 Mean=diff
-            const se = sd * Math.sqrt(2 / n);
-            const tScore = diff / se;
-            const df = 2 * n - 2;
-            const alpha = 0.05;
+            // --- 統計核心計算 (Welch's T-test) ---
+            
+            // 1. 計算變異數 (Variance)
+            const varA = sdA * sdA;
+            const varB = sdB * sdB;
 
+            // 2. 計算標準誤 (Standard Error for Unequal Variances)
+            // 公式: sqrt( s1^2/n1 + s2^2/n2 )
+            const se = Math.sqrt((varA / n) + (varB / n));
+            
+            // 3. 計算 T 值
+            const tScore = diff / se;
+
+            // 4. 計算 Welch-Satterthwaite 自由度 (df)
+            // 這是 Excel Type 3 自動在做的事，非常複雜的公式，用來修正自由度
+            const num = Math.pow((varA / n) + (varB / n), 2);
+            const den = (Math.pow((varA / n), 2) / (n - 1)) + (Math.pow((varB / n), 2) / (n - 1));
+            const df = num / den;
+
+            // 5. 計算 P 值與臨界值
+            const alpha = 0.05;
             let pValue = 0;
-            let criticalLower = null; // 拒絕域下限
-            let criticalUpper = null; // 拒絕域上限
+            let cLow = null, cUp = null;
 
             if (tails === 2) {
-                // 雙尾
                 pValue = 2 * (1 - jStat.studentt.cdf(Math.abs(tScore), df));
-                criticalUpper = jStat.studentt.inv(1 - alpha / 2, df);
-                criticalLower = -criticalUpper;
+                cUp = jStat.studentt.inv(1 - alpha / 2, df);
+                cLow = -cUp;
             } else {
-                // 單尾
                 if (direction === 'right') {
-                    // 右尾 (H1: B > A)
                     pValue = 1 - jStat.studentt.cdf(tScore, df);
-                    criticalUpper = jStat.studentt.inv(1 - alpha, df);
-                    criticalLower = null; // 左邊沒牆
+                    cUp = jStat.studentt.inv(1 - alpha, df);
                 } else {
-                    // 左尾 (H1: B < A)
                     pValue = jStat.studentt.cdf(tScore, df);
-                    criticalLower = jStat.studentt.inv(alpha, df);
-                    criticalUpper = null; // 右邊沒牆
+                    cLow = jStat.studentt.inv(alpha, df);
                 }
             }
 
-            // 3. 更新結果文字
+            // 更新結果
             const resText = document.getElementById('res-text');
             const isSignificant = pValue < 0.05;
-            
-            // 單尾檢定的特殊防呆：如果方向做反了 (例如想驗證 B>A 但 B其實小於A)，雖然 P值會很大，
-            // 但為了教學清楚，我們顯示狀態。
-            let statusText = isSignificant ? "★ 有顯著差異" : "無顯著差異";
-            
-            resText.textContent = statusText;
+            resText.textContent = isSignificant ? "★ 有顯著差異" : "無顯著差異";
             resText.className = "result-text " + (isSignificant ? "pass" : "fail");
             document.getElementById('res-t').textContent = tScore.toFixed(3);
             document.getElementById('res-p').textContent = pValue.toFixed(5);
+            document.getElementById('res-df').textContent = df.toFixed(2); // 顯示小數點的 df
 
-            // 4. 繪圖
-            drawRawPlot(diff, sd);
-            drawTestPlot(tScore, criticalLower, criticalUpper, tails, direction, df);
+            // 繪圖
+            drawRawPlot(diff, sdA, sdB);
+            drawTestPlot(tScore, cLow, cUp, df);
         }
 
-        function drawRawPlot(diff, sd) {
+        function drawRawPlot(diff, sdA, sdB) {
             const x = [];
             const yA = [];
             const yB = [];
-            // 動態調整 X 軸範圍，確保兩座山都看得到
-            const range = Math.max(8, Math.abs(diff) + 4*sd);
+            // 動態範圍：取兩者較大的 SD 來決定畫布寬度
+            const maxSD = Math.max(sdA, sdB);
+            const range = Math.max(8, Math.abs(diff) + 4 * maxSD);
             
             for (let i = -range; i <= range; i += 0.1) {
                 x.push(i);
-                yA.push(jStat.normal.pdf(i, 0, sd));
-                yB.push(jStat.normal.pdf(i, diff, sd));
+                yA.push(jStat.normal.pdf(i, 0, sdA));
+                yB.push(jStat.normal.pdf(i, diff, sdB));
             }
 
-            const traceA = { x: x, y: yA, type: 'scatter', fill: 'tozeroy', name: 'A 組 (基準 0)', line: { color: '#888' }, opacity: 0.5 };
-            const traceB = { x: x, y: yB, type: 'scatter', fill: 'tozeroy', name: 'B 組 (改變)', line: { color: '#007bff' }, opacity: 0.6 };
+            const traceA = { x: x, y: yA, type: 'scatter', fill: 'tozeroy', name: 'A 組 (SD=' + sdA + ')', line: { color: '#888' }, opacity: 0.5 };
+            const traceB = { x: x, y: yB, type: 'scatter', fill: 'tozeroy', name: 'B 組 (SD=' + sdB + ')', line: { color: '#007bff' }, opacity: 0.6 };
 
             const layout = {
-                title: '原始數據分佈 (Raw Data)',
+                title: '原始數據分佈：觀察胖瘦 (Variance)',
                 margin: { t: 30, b: 30, l: 30, r: 10 },
                 xaxis: { title: '數值' },
                 showlegend: true
@@ -187,56 +194,39 @@
             Plotly.newPlot('plot-raw', [traceA, traceB], layout, {staticPlot: true});
         }
 
-        function drawTestPlot(tScore, cLow, cUp, tails, direction, df) {
+        function drawTestPlot(tScore, cLow, cUp, df) {
             const x = [];
             const y = [];
             const range = Math.max(5, Math.abs(tScore) + 1);
             
+            // 使用計算出的 Welch df 來畫 T 分佈
             for (let i = -range; i <= range; i += 0.05) {
                 x.push(i);
                 y.push(jStat.studentt.pdf(i, df));
             }
 
-            const traceDist = { x: x, y: y, type: 'scatter', mode: 'lines', name: 'T 分佈', line: { color: '#333' } };
+            const traceDist = { x: x, y: y, type: 'scatter', mode: 'lines', name: 'T 分佈 (Welch)', line: { color: '#333' } };
             const shapes = [];
 
-            // 畫拒絕域 (紅色陰影)
-            if (cUp !== null) { // 右邊有牆
-                shapes.push({
-                    type: 'rect', xref: 'x', yref: 'paper',
-                    x0: cUp, x1: range, y0: 0, y1: 1,
-                    fillcolor: 'rgba(255, 0, 0, 0.2)', line: { width: 0 }
-                });
+            if (cUp !== null) {
+                shapes.push({ type: 'rect', xref: 'x', yref: 'paper', x0: cUp, x1: range, y0: 0, y1: 1, fillcolor: 'rgba(255, 0, 0, 0.2)', line: { width: 0 } });
             }
-            if (cLow !== null) { // 左邊有牆
-                shapes.push({
-                    type: 'rect', xref: 'x', yref: 'paper',
-                    x0: -range, x1: cLow, y0: 0, y1: 1,
-                    fillcolor: 'rgba(255, 0, 0, 0.2)', line: { width: 0 }
-                });
+            if (cLow !== null) {
+                shapes.push({ type: 'rect', xref: 'x', yref: 'paper', x0: -range, x1: cLow, y0: 0, y1: 1, fillcolor: 'rgba(255, 0, 0, 0.2)', line: { width: 0 } });
             }
 
-            // 畫你的 T 值 (藍線)
-            shapes.push({
-                type: 'line', xref: 'x', yref: 'paper',
-                x0: tScore, x1: tScore, y0: 0, y1: 0.9,
-                line: { color: 'blue', width: 3 }
-            });
+            shapes.push({ type: 'line', xref: 'x', yref: 'paper', x0: tScore, x1: tScore, y0: 0, y1: 0.9, line: { color: 'blue', width: 3 } });
 
             const layout = {
-                title: 'T 檢定分佈與拒絕域',
+                title: 'T 檢定結果 (基於 Welch 修正)',
                 margin: { t: 30, b: 30, l: 30, r: 10 },
                 shapes: shapes,
-                annotations: [{
-                    x: tScore, y: 0.95, xref: 'x', yref: 'paper',
-                    text: '你的 T 值', showarrow: true, arrowhead: 2, ax: 0, ay: -20, font: {color: 'blue'}
-                }]
+                annotations: [{ x: tScore, y: 0.95, xref: 'x', yref: 'paper', text: 'T 值', showarrow: true, arrowhead: 2, ax: 0, ay: -20, font: {color: 'blue'} }]
             };
             Plotly.newPlot('plot-test', [traceDist], layout, {staticPlot: true});
         }
 
-        // 初始化
-        toggleDirection();
+        update();
     </script>
 </body>
 </html>
