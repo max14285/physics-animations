@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T檢定視覺化模擬器：全方位版</title>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jstat/1.9.6/jstat.min.js"></script>
+    <style>
+        body { font-family: "Microsoft JhengHei", Arial, sans-serif; background-color: #f4f4f9; padding: 20px; max-width: 1000px; margin: 0 auto; }
+        h2 { text-align: center; color: #333; }
+        .container { display: flex; flex-wrap: wrap; gap: 20px; }
+        .controls { flex: 1; min-width: 300px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .charts { flex: 2; min-width: 300px; }
+        .control-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        .value-display { float: right; color: #007bff; }
+        .radio-group { display: flex; gap: 15px; margin-top: 5px; flex-wrap: wrap;}
+        .sub-option { margin-left: 20px; margin-top: 10px; padding: 10px; background: #f8f9fa; border-left: 3px solid #007bff; display: none; }
+        .result-box { margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 5px; text-align: center; }
+        .result-text { font-size: 1.2em; font-weight: bold; }
+        .pass { color: #28a745; }
+        .fail { color: #dc3545; }
+        .note { font-size: 0.9em; color: #666; margin-top: 5px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+
+    <h2>T 檢定視覺化：正負差異與檢定方向</h2>
+
+    <div class="container">
+        <div class="controls">
+            <div class="control-group">
+                <label>Step 1: 選擇檢定類型</label>
+                <div class="radio-group">
+                    <label><input type="radio" name="tails" value="2" checked onchange="toggleDirection()"> 雙尾 (Two-tailed)</label>
+                    <label><input type="radio" name="tails" value="1" onchange="toggleDirection()"> 單尾 (One-tailed)</label>
+                </div>
+                
+                <div id="direction-panel" class="sub-option">
+                    <label>單尾方向：</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="direction" value="right" checked onchange="update()"> 右尾 (驗證 B > A)</label>
+                        <label><input type="radio" name="direction" value="left" onchange="update()"> 左尾 (驗證 B < A)</label>
+                    </div>
+                </div>
+                <p class="note" id="tail-desc">設定說明...</p>
+            </div>
+
+            <hr>
+
+            <div class="control-group">
+                <label>平均值差異 (B - A)：<span id="val-diff" class="value-display">0.0</span></label>
+                <input type="range" id="diff" min="-5" max="5" step="0.1" value="0.0" oninput="update()">
+                <p class="note">往右拉：B 比 A 大 (正值)<br>往左拉：B 比 A 小 (負值)</p>
+            </div>
+
+            <div class="control-group">
+                <label>標準差 (SD)：<span id="val-sd" class="value-display">1.5</span></label>
+                <input type="range" id="sd" min="0.5" max="5" step="0.1" value="1.5" oninput="update()">
+            </div>
+
+            <div class="control-group">
+                <label>樣本數 (N)：<span id="val-n" class="value-display">30</span></label>
+                <input type="range" id="n" min="5" max="100" step="1" value="30" oninput="update()">
+            </div>
+
+            <div class="result-box">
+                <div>T 值 (T-score): <span id="res-t" style="font-weight:bold">0.00</span></div>
+                <div>P 值 (P-value): <span id="res-p" style="font-weight:bold">0.00</span></div>
+                <div id="res-text" class="result-text">計算中...</div>
+            </div>
+        </div>
+
+        <div class="charts">
+            <div id="plot-raw" style="width:100%; height:300px;"></div>
+            <div id="plot-test" style="width:100%; height:350px;"></div>
+        </div>
+    </div>
+
+    <script>
+        function toggleDirection() {
+            const tails = parseInt(document.querySelector('input[name="tails"]:checked').value);
+            const panel = document.getElementById('direction-panel');
+            // 如果是單尾，顯示方向選擇面板
+            panel.style.display = (tails === 1) ? 'block' : 'none';
+            update();
+        }
+
+        function update() {
+            // 1. 獲取輸入
+            const tails = parseInt(document.querySelector('input[name="tails"]:checked').value);
+            const diff = parseFloat(document.getElementById('diff').value);
+            const sd = parseFloat(document.getElementById('sd').value);
+            const n = parseInt(document.getElementById('n').value);
+            
+            // 獲取單尾方向 (right 或 left)
+            const direction = document.querySelector('input[name="direction"]:checked').value;
+
+            // 更新數值顯示
+            document.getElementById('val-diff').textContent = diff;
+            document.getElementById('val-sd').textContent = sd;
+            document.getElementById('val-n').textContent = n;
+
+            // 更新文字說明
+            const descLabel = document.getElementById('tail-desc');
+            if (tails === 2) {
+                descLabel.innerHTML = "雙尾：不論變大或變小，只要差異夠大就算顯著。<br>拒絕域在兩側 (紅區)。";
+            } else {
+                descLabel.innerHTML = direction === 'right' 
+                    ? "右尾：只想證明 B 顯著<b>大於</b> A。拒絕域在右側。"
+                    : "左尾：只想證明 B 顯著<b>小於</b> A。拒絕域在左側。";
+            }
+
+            // 2. 統計計算
+            // A組 Mean=0, B組 Mean=diff
+            const se = sd * Math.sqrt(2 / n);
+            const tScore = diff / se;
+            const df = 2 * n - 2;
+            const alpha = 0.05;
+
+            let pValue = 0;
+            let criticalLower = null; // 拒絕域下限
+            let criticalUpper = null; // 拒絕域上限
+
+            if (tails === 2) {
+                // 雙尾
+                pValue = 2 * (1 - jStat.studentt.cdf(Math.abs(tScore), df));
+                criticalUpper = jStat.studentt.inv(1 - alpha / 2, df);
+                criticalLower = -criticalUpper;
+            } else {
+                // 單尾
+                if (direction === 'right') {
+                    // 右尾 (H1: B > A)
+                    pValue = 1 - jStat.studentt.cdf(tScore, df);
+                    criticalUpper = jStat.studentt.inv(1 - alpha, df);
+                    criticalLower = null; // 左邊沒牆
+                } else {
+                    // 左尾 (H1: B < A)
+                    pValue = jStat.studentt.cdf(tScore, df);
+                    criticalLower = jStat.studentt.inv(alpha, df);
+                    criticalUpper = null; // 右邊沒牆
+                }
+            }
+
+            // 3. 更新結果文字
+            const resText = document.getElementById('res-text');
+            const isSignificant = pValue < 0.05;
+            
+            // 單尾檢定的特殊防呆：如果方向做反了 (例如想驗證 B>A 但 B其實小於A)，雖然 P值會很大，
+            // 但為了教學清楚，我們顯示狀態。
+            let statusText = isSignificant ? "★ 有顯著差異" : "無顯著差異";
+            
+            resText.textContent = statusText;
+            resText.className = "result-text " + (isSignificant ? "pass" : "fail");
+            document.getElementById('res-t').textContent = tScore.toFixed(3);
+            document.getElementById('res-p').textContent = pValue.toFixed(5);
+
+            // 4. 繪圖
+            drawRawPlot(diff, sd);
+            drawTestPlot(tScore, criticalLower, criticalUpper, tails, direction, df);
+        }
+
+        function drawRawPlot(diff, sd) {
+            const x = [];
+            const yA = [];
+            const yB = [];
+            // 動態調整 X 軸範圍，確保兩座山都看得到
+            const range = Math.max(8, Math.abs(diff) + 4*sd);
+            
+            for (let i = -range; i <= range; i += 0.1) {
+                x.push(i);
+                yA.push(jStat.normal.pdf(i, 0, sd));
+                yB.push(jStat.normal.pdf(i, diff, sd));
+            }
+
+            const traceA = { x: x, y: yA, type: 'scatter', fill: 'tozeroy', name: 'A 組 (基準 0)', line: { color: '#888' }, opacity: 0.5 };
+            const traceB = { x: x, y: yB, type: 'scatter', fill: 'tozeroy', name: 'B 組 (改變)', line: { color: '#007bff' }, opacity: 0.6 };
+
+            const layout = {
+                title: '原始數據分佈 (Raw Data)',
+                margin: { t: 30, b: 30, l: 30, r: 10 },
+                xaxis: { title: '數值' },
+                showlegend: true
+            };
+            Plotly.newPlot('plot-raw', [traceA, traceB], layout, {staticPlot: true});
+        }
+
+        function drawTestPlot(tScore, cLow, cUp, tails, direction, df) {
+            const x = [];
+            const y = [];
+            const range = Math.max(5, Math.abs(tScore) + 1);
+            
+            for (let i = -range; i <= range; i += 0.05) {
+                x.push(i);
+                y.push(jStat.studentt.pdf(i, df));
+            }
+
+            const traceDist = { x: x, y: y, type: 'scatter', mode: 'lines', name: 'T 分佈', line: { color: '#333' } };
+            const shapes = [];
+
+            // 畫拒絕域 (紅色陰影)
+            if (cUp !== null) { // 右邊有牆
+                shapes.push({
+                    type: 'rect', xref: 'x', yref: 'paper',
+                    x0: cUp, x1: range, y0: 0, y1: 1,
+                    fillcolor: 'rgba(255, 0, 0, 0.2)', line: { width: 0 }
+                });
+            }
+            if (cLow !== null) { // 左邊有牆
+                shapes.push({
+                    type: 'rect', xref: 'x', yref: 'paper',
+                    x0: -range, x1: cLow, y0: 0, y1: 1,
+                    fillcolor: 'rgba(255, 0, 0, 0.2)', line: { width: 0 }
+                });
+            }
+
+            // 畫你的 T 值 (藍線)
+            shapes.push({
+                type: 'line', xref: 'x', yref: 'paper',
+                x0: tScore, x1: tScore, y0: 0, y1: 0.9,
+                line: { color: 'blue', width: 3 }
+            });
+
+            const layout = {
+                title: 'T 檢定分佈與拒絕域',
+                margin: { t: 30, b: 30, l: 30, r: 10 },
+                shapes: shapes,
+                annotations: [{
+                    x: tScore, y: 0.95, xref: 'x', yref: 'paper',
+                    text: '你的 T 值', showarrow: true, arrowhead: 2, ax: 0, ay: -20, font: {color: 'blue'}
+                }]
+            };
+            Plotly.newPlot('plot-test', [traceDist], layout, {staticPlot: true});
+        }
+
+        // 初始化
+        toggleDirection();
+    </script>
+</body>
+</html>
