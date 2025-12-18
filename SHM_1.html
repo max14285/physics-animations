@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>簡諧運動與圓周運動投影模擬 (向量版)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        h2 { margin-bottom: 10px; font-weight: 300; }
+
+        .container {
+            position: relative;
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+
+        canvas {
+            background-color: #000;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+
+        .controls-area {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .sliders {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            text-align: left;
+        }
+
+        .control-group {
+            background: #333;
+            padding: 10px 15px;
+            border-radius: 8px;
+        }
+
+        .checkboxes {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            background: #333;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        input[type=range] { width: 100%; cursor: pointer; }
+        
+        .value-display { float: right; color: #4CAF50; font-weight: bold; }
+        
+        /* Vector Legend Colors */
+        .vec-legend { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+    </style>
+</head>
+<body>
+
+    <h2>簡諧運動投影 - 向量分析</h2>
+
+    <div class="container">
+        <canvas id="simCanvas" width="800" height="500"></canvas>
+        
+        <div class="controls-area">
+            
+            <div class="checkboxes">
+                <label class="checkbox-item">
+                    <input type="checkbox" id="checkVel" checked> 
+                    <span class="vec-legend" style="background:#00ff00;"></span> 顯示速度 (v)
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="checkAcc"> 
+                    <span class="vec-legend" style="background:#ff9800;"></span> 顯示加速度 (a)
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="checkForce"> 
+                    <span class="vec-legend" style="background:#d500f9;"></span> 顯示受力 (F)
+                </label>
+            </div>
+
+            <div class="sliders">
+                <div class="control-group">
+                    <label>
+                        物理質量 (m) <span id="massVal" class="value-display">2.0 kg</span>
+                    </label>
+                    <input type="range" id="massSlider" min="0.5" max="10" step="0.5" value="2.0">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        彈性常數 (k) <span id="kVal" class="value-display">2.0 N/m</span>
+                    </label>
+                    <input type="range" id="kSlider" min="0.5" max="10" step="0.5" value="2.0">
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 10px; font-size: 0.9em; color: #ccc;">
+            角頻率 $\omega$ = <span id="omegaVal" style="color:white">1.00</span> rad/s
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Inputs
+        const massSlider = document.getElementById('massSlider');
+        const kSlider = document.getElementById('kSlider');
+        const checkVel = document.getElementById('checkVel');
+        const checkAcc = document.getElementById('checkAcc');
+        const checkForce = document.getElementById('checkForce');
+
+        // Displays
+        const massDisplay = document.getElementById('massVal');
+        const kDisplay = document.getElementById('kVal');
+        const omegaDisplay = document.getElementById('omegaVal');
+
+        // Physics State
+        let time = 0;
+        let mass = parseFloat(massSlider.value);
+        let k = parseFloat(kSlider.value);
+        let omega = Math.sqrt(k / mass);
+        const amplitude = 140; 
+        
+        // Layout Config
+        const centerX = canvas.width / 2;
+        const topCenterY = 170;    // Center of circle
+        const bottomCenterY = 400; // Center of oscillation line
+        
+        // Vector Scaling Factors (To make arrows visible but fit on screen)
+        const V_SCALE = 20; 
+        const A_SCALE = 20;
+        const F_SCALE = 10; 
+
+        // Listeners
+        function updateParams() {
+            mass = parseFloat(massSlider.value);
+            k = parseFloat(kSlider.value);
+            omega = Math.sqrt(k / mass);
+            
+            massDisplay.textContent = mass.toFixed(1) + " kg";
+            kDisplay.textContent = k.toFixed(1) + " N/m";
+            omegaDisplay.textContent = omega.toFixed(2);
+        }
+
+        [massSlider, kSlider].forEach(el => el.addEventListener('input', updateParams));
+
+        function drawSpring(x1, y1, x2, y2, windings, width, color) {
+            ctx.beginPath();
+            ctx.lineWidth = width;
+            ctx.strokeStyle = color;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            let dx = x2 - x1;
+            let dy = y2 - y1;
+            let length = Math.sqrt(dx * dx + dy * dy);
+            let nx = dx / length;
+            let ny = dy / length;
+            let px = -ny;
+            let py = nx;
+
+            let zigzagHeight = 20; 
+            ctx.moveTo(x1, y1);
+            
+            let leadLength = 20;
+            let activeLength = length - (leadLength * 2);
+            let step = activeLength / (windings * 2);
+
+            let currentX = x1 + nx * leadLength;
+            let currentY = y1 + ny * leadLength;
+            ctx.lineTo(currentX, currentY);
+
+            for (let i = 0; i < windings * 2; i++) {
+                let sign = (i % 2 === 0) ? 1 : -1;
+                let nextX = currentX + nx * step;
+                let nextY = currentY + ny * step;
+                ctx.lineTo(nextX + px * sign * zigzagHeight, nextY + py * sign * zigzagHeight);
+                currentX = nextX;
+                currentY = nextY;
+            }
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        // Helper: Draw Vector Arrow
+        function drawArrow(x, y, vx, vy, color, label, offsetY = 0) {
+            const arrowSize = 10;
+            const endX = x + vx;
+            const endY = y + vy + offsetY;
+            const startY = y + offsetY;
+
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 3;
+
+            // Draw Line
+            ctx.beginPath();
+            ctx.moveTo(x, startY);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+
+            // Draw Head
+            const angle = Math.atan2(endY - startY, endX - x);
+            ctx.beginPath();
+            ctx.moveTo(endX, endY);
+            ctx.lineTo(endX - arrowSize * Math.cos(angle - Math.PI / 6), endY - arrowSize * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(endX - arrowSize * Math.cos(angle + Math.PI / 6), endY - arrowSize * Math.sin(angle + Math.PI / 6));
+            ctx.fill();
+
+            // Label
+            if (label) {
+                ctx.font = "bold 14px Arial";
+                ctx.fillText(label, endX + 10, endY);
+            }
+            ctx.restore();
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Calculations
+            let theta = time * omega; // Phase angle
+            
+            // Physics values (Magnitudes & Directions)
+            // Position (Standard cos start)
+            let cosT = Math.cos(theta);
+            let sinT = Math.sin(theta);
+
+            // Coordinates
+            // Circle: x = r*cos, y = r*sin (Note: Canvas Y is + downwards, physics usually + upwards)
+            let circleX = centerX + amplitude * cosT;
+            let circleY = topCenterY - amplitude * sinT; // Minus for "Up" on canvas
+            
+            let shmX = centerX + amplitude * cosT;
+            let shmY = bottomCenterY;
+
+            // Velocities (v = r*omega)
+            let v_mag = amplitude * omega;
+            // Circle Velocity (Tangential)
+            let circleVx = -v_mag * sinT; 
+            let circleVy = -v_mag * cosT; 
+            // SHM Velocity (Linear)
+            let shmVx = -v_mag * sinT;
+
+            // Accelerations (a = r*omega^2)
+            let a_mag = amplitude * omega * omega;
+            // Circle Acc (Centripetal, towards center)
+            let circleAx = -a_mag * cosT;
+            let circleAy = a_mag * sinT; // Pointing towards center (y inverted logic handled by calc)
+            // SHM Acc
+            let shmAx = -a_mag * cosT;
+
+            // Force (F = ma)
+            let f_mag = mass * a_mag;
+            let shmFx = -f_mag * cosT;
+
+            // Visual Scaling
+            let ballRadius = 12 + (Math.pow(mass, 1/3) * 8);
+            let springWidth = 2 + (k * 0.8);
+
+            // 2. Draw Backgrounds
+            // Circle Track
+            ctx.beginPath();
+            ctx.arc(centerX, topCenterY, amplitude, 0, Math.PI * 2);
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Floor
+            ctx.beginPath();
+            ctx.moveTo(50, bottomCenterY + ballRadius + 5);
+            ctx.lineTo(canvas.width - 50, bottomCenterY + ballRadius + 5);
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Wall
+            ctx.fillStyle = '#444';
+            ctx.fillRect(centerX - amplitude - 100, bottomCenterY - 40, 20, 80);
+
+            // 3. Draw Spring
+            drawSpring(centerX - amplitude - 80, bottomCenterY, shmX - ballRadius, bottomCenterY, 12, springWidth, '#ccc');
+
+            // 4. Draw Projection Line (Dashed)
+            ctx.beginPath();
+            ctx.setLineDash([5, 5]); // Dashed
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.moveTo(circleX, circleY);
+            ctx.lineTo(shmX, shmY);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
+
+            // 5. Draw Balls
+            // Circle Ball
+            ctx.beginPath();
+            ctx.arc(circleX, circleY, ballRadius, 0, Math.PI * 2);
+            ctx.fillStyle = '#00d2ff';
+            ctx.fill();
+            
+            // SHM Ball
+            ctx.beginPath();
+            ctx.arc(shmX, shmY, ballRadius, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff4081';
+            ctx.fill();
+
+            // 6. Draw Vectors (If checked)
+            
+            // --- Velocity (Green) ---
+            if (checkVel.checked) {
+                // Circle: Tangential
+                drawArrow(circleX, circleY, circleVx * V_SCALE / 50, circleVy * V_SCALE / 50, '#00ff00', 'v');
+                // SHM: Horizontal
+                // Draw slightly above ball to avoid clutter
+                drawArrow(shmX, shmY, shmVx * V_SCALE / 50, 0, '#00ff00', 'v', -ballRadius - 10);
+            }
+
+            // --- Acceleration (Orange) ---
+            if (checkAcc.checked) {
+                // Circle: Centripetal (Normal)
+                drawArrow(circleX, circleY, circleAx * A_SCALE / 50, circleAy * A_SCALE / 50, '#ff9800', 'a');
+                // SHM: Restoring
+                drawArrow(shmX, shmY, shmAx * A_SCALE / 50, 0, '#ff9800', 'a', -ballRadius - 25);
+            }
+
+            // --- Force (Purple) ---
+            if (checkForce.checked) {
+                // We only draw force for SHM usually, but for consistency we can show the centripetal force on the circle too if desired.
+                // Let's stick to SHM force primarily as that's usually the focus, or draw both. 
+                // Let's draw both but offset slightly.
+                
+                // SHM Force (Overlap with Acc but scaled differently or offset)
+                // Draw Force below the ball
+                drawArrow(shmX, shmY, shmFx * F_SCALE / 50, 0, '#d500f9', 'F', ballRadius + 15);
+                
+                // Circle Force (Centripetal Force)
+                // Offset from Acc slightly or just overwrite? Overwrite creates "blending", let's draw it slightly thicker behind?
+                // Or just show it along the radius
+                let fCx = circleAx * mass; 
+                let fCy = circleAy * mass;
+                drawArrow(circleX, circleY, fCx * F_SCALE / 50, fCy * F_SCALE / 50, '#d500f9', 'F');
+            }
+
+            time += 0.05;
+            requestAnimationFrame(animate);
+        }
+
+        updateParams();
+        animate();
+
+    </script>
+</body>
+</html>
