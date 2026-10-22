@@ -1,0 +1,823 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>雙狹縫干涉</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Layout: 左側是可旋轉的 3D 水槽(上)加觀察點儀表(下),右側是控制欄;窄螢幕改為上下堆疊。
+   色彩:每條縫一個顏色(綠、紅、紫、青、粉、黃綠),藍 = 疊加,琥珀 = 觀察點 P。 */
+:root{
+  --bg:#080d18; --panel:#0e1626; --panel2:#142039; --line:#233450;
+  --fg:#e8eef9; --dim:#8b9cb8;
+  --s1:#4fd98a; --s2:#ff7b7b; --s3:#c792ff; --s4:#4dd0e1; --s5:#ff9ec7; --s6:#b8e063;
+  --sum:#5aa8ff; --probe:#ffc24b;
+  --font:'Noto Sans TC',system-ui,'PingFang TC','Microsoft JhengHei',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 var(--font);
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:12px;
+}
+.app{display:grid;grid-template-columns:minmax(0,1fr) clamp(400px,35vw,580px);grid-template-rows:minmax(0,1fr) auto;gap:14px;height:100%}
+.app>.stage{grid-column:1;grid-row:1}
+.right{grid-column:2;grid-row:1/3;display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0}
+.stage{position:relative;min-height:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0a0f1a}
+.stage canvas{display:block;width:100%;height:100%;touch-action:none}
+.tag{position:absolute;left:0;top:0;pointer-events:none;font-size:12px;font-weight:500;white-space:nowrap;
+  padding:1px 7px;border-radius:4px;background:rgba(8,13,24,.72);border:1px solid var(--line);will-change:transform}
+.tag.sl1{border-color:currentColor}
+.tag.p{color:var(--probe);border-color:rgba(255,194,75,.55);font-family:var(--mono)}
+.hint{position:absolute;left:10px;bottom:8px;font-size:12px;color:var(--dim);pointer-events:none;
+  background:rgba(8,13,24,.6);padding:2px 8px;border-radius:4px}
+.fail{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--dim)}
+
+.blk{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+.blk h2{margin:0 0 6px;font-size:12px;font-weight:500;letter-spacing:.06em;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap;align-items:baseline}
+.blk h2 .lg{display:inline-flex;align-items:center;gap:5px;letter-spacing:0;font-family:var(--mono);font-size:11px}
+.blk h2 .lg i{width:14px;height:3px;border-radius:2px;display:inline-block}
+.ph-blk{flex:1 1 0;min-height:240px;display:flex;flex-direction:column}
+.ph-blk .cv{position:relative;flex:1 1 0;min-height:0}
+.ph-blk .cv canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.ro-blk,.sc-blk{flex:none}
+#sc{width:100%;height:150px;display:block}
+.ro{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0;font-size:12.5px}
+.ro dt{color:var(--dim)}
+.ro dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.meter{height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;margin-top:8px}
+.meter>b{display:block;height:100%;width:0;background:var(--sum);transition:width .12s}
+.chip{display:inline-block;margin-top:8px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:500;border:1px solid var(--line);color:var(--dim)}
+.chip.hi{color:#0b1a2e;background:var(--probe);border-color:var(--probe)}
+.chip.lo{color:var(--fg);background:#1b2a46;border-color:#3a5078}
+
+.side{grid-column:1;grid-row:2;min-height:0;max-height:42vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px 22px;align-items:start}
+.side .note{grid-column:1/-1}
+.side h1{margin:0;font-size:20px;font-weight:700;letter-spacing:.02em}
+.sub{margin:4px 0 0;color:var(--dim);font-size:13px}
+.grp{display:flex;flex-direction:column;gap:8px}
+.grp h3{margin:0;font-size:11px;font-weight:500;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+  padding:6px 12px;cursor:pointer;min-height:34px}
+.btn:hover{border-color:#3d5680}
+.btn.primary{background:var(--sum);border-color:var(--sum);color:#06121f;font-weight:700;min-width:84px}
+.btn:focus-visible,input:focus-visible{outline:2px solid var(--probe);outline-offset:2px}
+.tgl{display:flex;flex-wrap:wrap;gap:6px}
+.tgl .btn{padding:4px 10px;min-height:32px;display:flex;align-items:center;gap:6px;font-size:12.5px}
+.tgl .btn[aria-pressed="false"]{opacity:.5;text-decoration:line-through}
+.tgl .btn[aria-pressed="true"]{background:#1b2c4b;border-color:#3d5680}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.sl{display:grid;grid-template-columns:1fr auto;gap:0 8px;align-items:baseline;font-size:13px}
+.sl output{font-family:var(--mono);color:var(--probe);font-variant-numeric:tabular-nums}
+.sl input{grid-column:1/-1;width:100%;margin:4px 0 0;accent-color:var(--sum)}
+.chk{display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer}
+.chk input{accent-color:var(--sum);width:16px;height:16px;margin:0}
+.msg{min-height:1.4em;margin:0;font-size:12px;color:var(--probe)}
+.note{margin:0;font-size:12.5px;color:var(--dim);line-height:1.65;border-top:1px solid var(--line);padding-top:10px}
+.note b{color:var(--fg);font-weight:500}
+.fr{white-space:pre-line;margin:0;font-size:12px;color:var(--dim);font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+@media (max-width:900px){
+  html,body{height:auto;min-height:100%}
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;height:auto}
+  .app>.stage{grid-column:1;grid-row:1;height:58vh;min-height:340px}
+  .right{grid-column:1;grid-row:2}
+  .ph-blk{flex:none}
+  .ph-blk .cv{flex:none;aspect-ratio:1/1;width:100%;max-width:520px;margin:0 auto}
+  .side{grid-column:1;grid-row:3;max-height:none;overflow:visible}
+}
+@media (prefers-reduced-motion:reduce){.meter>b{transition:none}}
+</style>
+
+<div class="app">
+  <div class="stage" id="stage">
+    <canvas id="gl" aria-label="多狹縫干涉的三維水波動畫"></canvas>
+    <div id="tags"></div>
+    <div class="hint">拖曳旋轉 · 滾輪或雙指縮放 · 拖動琥珀色 P 點</div>
+  </div>
+
+  <section class="right">
+    <div class="blk ph-blk">
+      <h2>P 點的相量圖</h2>
+      <div class="cv"><canvas id="ph"></canvas></div>
+    </div>
+    <div class="blk ro-blk">
+      <h2>P 點讀數</h2>
+      <dl class="ro">
+        <dt>r₁ 縫 1 到 P</dt><dd id="ro_r1">–</dd>
+        <dt>r₂ 縫 2 到 P</dt><dd id="ro_r2">–</dd>
+        <dt>縫 1、2 路徑差 Δ</dt><dd id="ro_dl">–</dd>
+        <dt>相位差 δ(橘弧)</dt><dd id="ro_dg">–</dd>
+        <dt>|E| 佔最大值</dt><dd id="ro_amp">–</dd>
+      </dl>
+      <div class="meter" aria-hidden="true"><b id="ro_bar"></b></div>
+      <span class="chip" id="ro_chip">–</span>
+    </div>
+    <div class="blk sc-blk">
+      <h2>P 點的電場隨時間 <span id="lgSlits" style="display:contents"></span>
+        <span class="lg" style="color:var(--sum)"><i style="background:var(--sum)"></i><span id="lgSum">E = E₁ + E₂</span></span>
+      </h2>
+      <canvas id="sc" width="400" height="150"></canvas>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="grp intro">
+    <header>
+      <h1 id="title">雙狹縫干涉</h1>
+      <p class="sub">水面高度代表電場 E。每條縫各送出一道圓形波,到達 P 點時以相量相加。</p>
+    </header>
+
+    <div class="row">
+      <button class="btn primary" id="play" type="button">暫停</button>
+      <button class="btn" id="resetCam" type="button">重設視角</button>
+    </div>
+    </div>
+
+    <div class="grp">
+      <h3>狹縫</h3>
+      <label class="sl"><span>狹縫數 N</span><output id="o_n"></output>
+        <input id="nslit" type="range" min="1" max="30" step="1" value="2"></label>
+      <div class="tgl" id="tgl" role="group" aria-label="各縫開關(點一下可遮住或打開)"></div>
+      <div class="row"><button class="btn" type="button" id="allOn">全部打開</button></div>
+    </div>
+
+    <div class="grp">
+      <h3>裝置</h3>
+      <label class="sl"><span>波長 λ</span><output id="o_lam"></output>
+        <input id="lam" type="range" min="0.5" max="1.4" step="0.01" value="0.7"></label>
+      <label class="sl"><span>最大間距 D(第 1 縫到第 N 縫)</span><output id="o_D"></output>
+        <input id="D" type="range" min="1.2" max="12" step="0.1" value="2.4"></label>
+      <label class="sl"><span>屏幕距離 L</span><output id="o_L"></output>
+        <input id="L" type="range" min="6" max="12" step="0.5" value="10"></label>
+      <p class="fr" id="fringe"></p>
+    </div>
+
+    <div class="grp">
+      <h3>時間</h3>
+      <label class="sl"><span>頻率(播放速度)</span><output id="o_sp"></output>
+        <input id="speed" type="range" min="0.05" max="2.5" step="0.05" value="1"></label>
+      <label class="sl"><span>相位 ωt</span><output id="o_ph"></output>
+        <input id="phase" type="range" min="0" max="360" step="1" value="0"></label>
+    </div>
+
+    <div class="grp">
+      <h3>觀察點 P</h3>
+      <label class="sl"><span>位置 x(向右為傳播方向)</span><output id="o_px"></output>
+        <input id="px" type="range" min="0.8" max="10" step="0.05" value="10"></label>
+      <label class="sl"><span>位置 z(螢幕上下)</span><output id="o_pz"></output>
+        <input id="pz" type="range" min="-7.5" max="7.5" step="0.05" value="0"></label>
+      <div class="row">
+        <button class="btn" type="button" data-goto="0">中央亮紋</button>
+        <button class="btn" type="button" data-goto="0.5">第一暗紋</button>
+        <button class="btn" type="button" data-goto="1">第一亮紋</button>
+      </div>
+      <p class="msg" id="msg" role="status"></p>
+    </div>
+
+    <div class="grp">
+      <h3>圖層</h3>
+      <label class="chk"><input id="showNodes" type="checkbox" checked>亮紋與暗紋的位置線</label>
+      <label class="chk"><input id="showPaths" type="checkbox" checked>各縫到 P 的路徑與波形</label>
+      <label class="chk"><input id="showScreen" type="checkbox" checked>螢幕亮度與強度曲線</label>
+    </div>
+
+    <p class="note">
+      <b>怎麼看:</b>相鄰兩縫到 P 的路徑差 Δ 決定相位差 δ = 2πΔ/λ。
+      Δ = mλ 時所有相量同向,合成最長,是亮紋(主極大)。
+      這裡固定的是第 1 縫到第 N 縫的最大間距 D,縫數增加時,相鄰縫距 d = D/(N − 1) 會變小。N 不大時,每個亮紋(主極大)變窄變亮,之間出現 N − 1 條暗紋和較弱的次極大;d 縮到比 λ 還小,就只剩中央亮紋。N 很大時,這一排點波源就像一道寬 D 的連續單狹縫,螢幕上變成單縫繞射:中央亮紋寬約 2λL/D,兩側是較弱的次極大。
+      兩縫時的位置線是精確的雙曲線,三縫以上改用遠場近似的直線。
+      縫數多時,螢幕要離得夠遠條紋才會接近等間距,距離不夠時條紋會變形。只開一道縫時,螢幕上沒有條紋。
+    </p>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const cs=getComputedStyle(document.documentElement);
+const tok=n=>cs.getPropertyValue(n).trim();
+const NMAX=30;
+function hslHex(h,s,l){s/=100;l/=100;const a=s*Math.min(l,1-l);
+  const f=n=>{const k=(n+h/30)%12,c=l-a*Math.max(-1,Math.min(k-3,9-k,1));return Math.round(255*c).toString(16).padStart(2,'0');};
+  return '#'+f(0)+f(8)+f(4);}
+const SC=[];for(let i=0;i<NMAX;i++) SC.push(i<6?tok('--s'+(i+1)):hslHex((i*137.508)%360,70,66));
+const COL={sum:tok('--sum'),probe:tok('--probe'),fg:tok('--fg'),dim:tok('--dim'),line:tok('--line')};
+const hexRGB=h=>{h=h.replace('#','');return [0,2,4].map(i=>parseInt(h.substr(i,2),16)/255);};
+const SCN=SC.map(hexRGB);
+const sub=k=>String(k+1).replace(/\d/g,c=>'₀₁₂₃₄₅₆₇₈₉'[+c]);
+
+/* ---------- 物理與狀態 ---------- */
+const V=0.35;                // 波速(單位/秒),慢一點方便觀察
+const H=0.3;                 // 每單位電場對應的視覺高度
+const XMIN=-7, XMAX=16, ZMAX=8, R0=6, G=1.2;
+let SLITW=0.5;
+const S={n:2,lam:0.7,D:2.4,d:2.4,L:10,speed:1,playing:true,px:10,pz:0,phase:0,
+         showNodes:true,showPaths:true,showScreen:true};
+const ON=new Array(NMAX).fill(true), ALL=new Array(NMAX).fill(true);
+try{ if(matchMedia('(prefers-reduced-motion: reduce)').matches) S.playing=false; }catch(e){}
+const TAU=Math.PI*2;
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+const sstep=(a,b,x)=>{x=clamp((x-a)/(b-a),0,1);return x*x*(3-2*x)};
+const wrapPi=a=>{a=(a+Math.PI)%TAU; if(a<0)a+=TAU; return a-Math.PI};
+const slitZ=k=>(k-(S.n-1)/2)*S.d;
+const nActive=()=>{let c=0;for(let k=0;k<S.n;k++) if(ON[k]) c++; return c;};
+const hScale=na=>H*2/Math.max(2,na);                 // 縫很多時,總振幅約與縫數成正比,所以高度反比壓低
+const hScaleW=na=>H*Math.pow(2/Math.max(2,na),0.6);   // 路徑上的單縫波形用   // 縫多時壓低高度,避免衝出畫面
+
+let _r=0;
+// 單一狹縫(位於 x=0, z=zs)送出的圓形波在 (x,z) 的振幅;距離存進 _r
+function srcA(x,z,zs){
+  const dz=z-zs, r=Math.sqrt(x*x+dz*dz); _r=r;
+  const a=1/Math.sqrt(1+r/R0);
+  const obl=0.5*(1+(r>1e-6?x/r:1));
+  const open=1-sstep(SLITW*0.5,SLITW*0.5+0.5,Math.abs(dz));
+  const ramp=clamp(x/0.7+open,0,1);
+  return G*a*obl*ramp;
+}
+
+/* ---------- three.js ---------- */
+const stage=$('stage');
+if(!window.THREE){ stage.insertAdjacentHTML('beforeend','<div class="fail">三維函式庫沒有載入成功,請重新整理頁面。</div>'); return; }
+let renderer;
+try{ renderer=new THREE.WebGLRenderer({canvas:$('gl'),antialias:true}); }
+catch(e){ stage.insertAdjacentHTML('beforeend','<div class="fail">這個瀏覽器無法使用 WebGL,所以看不到三維畫面。</div>'); return; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.setClearColor(0x0a0f1a,1);
+
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(38,1,0.1,300);
+const TARGET=new THREE.Vector3(5.5,-0.4,0.4);
+const cam={yaw:-0.5,pitch:0.62,R:24};
+function camUpdate(){
+  const cp=Math.cos(cam.pitch);
+  camera.position.set(TARGET.x+cam.R*Math.sin(cam.yaw)*cp, TARGET.y+cam.R*Math.sin(cam.pitch), TARGET.z+cam.R*Math.cos(cam.yaw)*cp);
+  camera.lookAt(TARGET);
+}
+function resetCam(){
+  const asp=stage.clientWidth/Math.max(1,stage.clientHeight);
+  if(asp<0.95){ cam.yaw=-1.15; cam.pitch=0.6; cam.R=36; }   // 窄螢幕:沿傳播方向看,讓 z 方向佔滿寬度
+  else { cam.yaw=-0.5; cam.pitch=0.62; cam.R=27; }
+  camUpdate();
+}
+
+scene.add(new THREE.AmbientLight(0x8aa0c8,0.55));
+const sun=new THREE.DirectionalLight(0xffffff,0.95); sun.position.set(-6,14,9); scene.add(sun);
+const rim=new THREE.DirectionalLight(0x7aa2ff,0.35); rim.position.set(12,6,-10); scene.add(rim);
+
+/* 水面 */
+const NX=300, NZ=140, N=NX*NZ;
+const gx=new Float32Array(N), gz=new Float32Array(N);
+const SS=new Float32Array(N), CC=new Float32Array(N);   // 各點合成場 = SS·cos(ωt) − CC·sin(ωt)
+const KIND=new Uint8Array(N);   // 0 傳出的波, 1 入射平面波, 2 屏幕之後(平靜)
+const pos=new Float32Array(N*3), colr=new Float32Array(N*3);
+for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
+  const n=j*NX+i, x=XMIN+(XMAX-XMIN)*i/(NX-1), z=-ZMAX+2*ZMAX*j/(NZ-1);
+  gx[n]=x; gz[n]=z; pos[3*n]=x; pos[3*n+1]=0; pos[3*n+2]=z;
+}
+const idx=new Uint32Array((NX-1)*(NZ-1)*6);
+{let t=0; for(let j=0;j<NZ-1;j++)for(let i=0;i<NX-1;i++){
+  const a=j*NX+i,b=a+1,c=a+NX,d=c+1;
+  idx[t++]=a;idx[t++]=c;idx[t++]=b; idx[t++]=b;idx[t++]=c;idx[t++]=d;
+}}
+const geo=new THREE.BufferGeometry();
+const posAttr=new THREE.BufferAttribute(pos,3), colAttr=new THREE.BufferAttribute(colr,3);
+posAttr.setUsage(THREE.DynamicDrawUsage); colAttr.setUsage(THREE.DynamicDrawUsage);
+geo.setAttribute('position',posAttr); geo.setAttribute('color',colAttr);
+geo.setIndex(new THREE.BufferAttribute(idx,1));
+const water=new THREE.Mesh(geo,new THREE.MeshPhongMaterial({vertexColors:true,shininess:70,specular:0x7a98c8,
+  transparent:true,opacity:0.9,side:THREE.DoubleSide}));
+scene.add(water);
+
+/* 水槽底部格線 */
+{
+  const pts=[];
+  for(let x=Math.ceil(XMIN);x<=XMAX;x++) pts.push(x,-1,-ZMAX, x,-1,ZMAX);
+  for(let z=-ZMAX;z<=ZMAX;z++) pts.push(XMIN,-1,z, XMAX,-1,z);
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));
+  scene.add(new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x1b2c48,transparent:true,opacity:.9})));
+  const base=new THREE.Mesh(new THREE.PlaneGeometry(XMAX-XMIN,2*ZMAX),new THREE.MeshBasicMaterial({color:0x060a13}));
+  base.rotation.x=-Math.PI/2; base.position.set((XMAX+XMIN)/2,-1.01,0); scene.add(base);
+}
+
+/* 障礙板與縫 */
+const barMat=new THREE.MeshPhongMaterial({color:0x2b3c5e,shininess:30});
+const lidMat=new THREE.MeshPhongMaterial({color:0x6b3440,shininess:20,emissive:0x2a0e14});
+const unit=new THREE.BoxGeometry(1,1,1);
+const bars=[];for(let i=0;i<=NMAX;i++){const m=new THREE.Mesh(unit,barMat);scene.add(m);bars.push(m);}
+const lids=[];for(let i=0;i<NMAX;i++){const m=new THREE.Mesh(unit,lidMat);scene.add(m);lids.push(m);}
+function layoutBarrier(){
+  const w=SLITW,T=0.3,Hh=1.7,e=0.3;
+  for(let i=0;i<=NMAX;i++){
+    const b=bars[i]; if(i>S.n){b.visible=false;continue;} b.visible=true;
+    const a=(i===0)?-ZMAX-e:slitZ(i-1)+w/2, c=(i===S.n)?ZMAX+e:slitZ(i)-w/2;
+    b.scale.set(T,Hh,c-a); b.position.set(0,0,(a+c)/2);
+  }
+  for(let k=0;k<NMAX;k++){
+    const l=lids[k]; if(k>=S.n){l.visible=false;continue;}
+    l.visible=!ON[k]; l.scale.set(T*0.9,Hh*0.9,w*0.98); l.position.set(0,0,slitZ(k));
+  }
+}
+
+/* 屏幕、強度曲線 */
+const TEXW=1024;
+const texCv=document.createElement('canvas'); texCv.width=TEXW; texCv.height=8;
+const tex=new THREE.CanvasTexture(texCv); tex.minFilter=THREE.LinearFilter; tex.magFilter=THREE.LinearFilter; tex.generateMipmaps=false;
+const screenMesh=new THREE.Mesh(new THREE.PlaneGeometry(2*ZMAX,2.2),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
+screenMesh.rotation.y=-Math.PI/2; scene.add(screenMesh);
+const frame=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(2*ZMAX,2.2)),new THREE.LineBasicMaterial({color:0x4a6290}));
+frame.rotation.y=-Math.PI/2; scene.add(frame);
+
+const NS=161;
+const curvePos=new Float32Array(NS*3), hatchPos=new Float32Array(NS*6);
+const curveGeo=new THREE.BufferGeometry(); curveGeo.setAttribute('position',new THREE.BufferAttribute(curvePos,3));
+const curve=new THREE.Line(curveGeo,new THREE.LineBasicMaterial({color:0xffc24b}));
+const hatchGeo=new THREE.BufferGeometry(); hatchGeo.setAttribute('position',new THREE.BufferAttribute(hatchPos,3));
+const hatch=new THREE.LineSegments(hatchGeo,new THREE.LineBasicMaterial({color:0xffc24b,transparent:true,opacity:.28}));
+curve.frustumCulled=false; hatch.frustumCulled=false;
+scene.add(curve,hatch);
+
+/* 亮紋/暗紋的位置線 */
+const nodeGroup=new THREE.Group(); scene.add(nodeGroup);
+const maxMat=new THREE.LineBasicMaterial({color:0xffd36b,transparent:true,opacity:.9,depthTest:false});
+function clearGroup(g){while(g.children.length){const c=g.children.pop(); if(c.geometry)c.geometry.dispose();}}
+function hyper(c0){            // 兩縫:r₂ − r₁ = c0 的精確雙曲線
+  const c=S.d/2;
+  if(Math.abs(c0)<1e-9) return [0.3,0,0, S.L,0,0];
+  const a=Math.abs(c0)/2; if(a>=c*0.999) return null;
+  const b2=c*c-a*a, sg=c0>0?-1:1, out=[], n=70;
+  for(let i=0;i<=n;i++){
+    const x=0.3+(S.L-0.3)*i/n, z=sg*a*Math.sqrt(1+x*x/b2);
+    if(Math.abs(z)>ZMAX-0.05) break;
+    out.push([x,z]);
+  }
+  if(out.length<2) return null;
+  return out.flatMap(p=>[p[0],0,p[1]]);
+}
+function ray(s){               // 多縫:遠場近似,sinθ = s
+  if(Math.abs(s)>=0.999) return null;
+  const th=Math.asin(s), cx=Math.cos(th), sx=Math.sin(th);
+  const t0=0.3/cx, t1=Math.min(S.L/cx, Math.abs(sx)>1e-6?(ZMAX-0.1)/Math.abs(sx):1e9);
+  if(t1<=t0) return null;
+  return [t0*cx,0,t0*sx, t1*cx,0,t1*sx];
+}
+function addLine(p,dashed){
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));
+  let l;
+  if(dashed){ l=new THREE.Line(g,new THREE.LineDashedMaterial({color:0x7f9bd0,dashSize:.25,gapSize:.2,transparent:true,opacity:.6,depthTest:false})); l.computeLineDistances(); l.renderOrder=4; }
+  else { l=new THREE.Line(g,maxMat); l.renderOrder=5; }
+  nodeGroup.add(l);
+}
+function rebuildNodes(){
+  clearGroup(nodeGroup);
+  const mx=Math.floor(S.d/S.lam);
+  if(S.n===2){
+    for(let m=-mx;m<=mx;m++){const p=hyper(m*S.lam); if(p) addLine(p,false);}
+    for(let m=-mx-1;m<=mx;m++){const c0=(m+0.5)*S.lam; if(Math.abs(c0)>=S.d*0.999) continue; const p=hyper(c0); if(p) addLine(p,true);}
+  } else if(S.n>=3){
+    for(let m=-mx;m<=mx;m++){const p=ray(m*S.lam/S.d); if(p) addLine(p,false);}
+    if(S.n<=12){   // 縫多時只畫中央附近(m = −1、0)的暗紋線
+      const m0=S.n<=4?-mx-1:-1, m1=S.n<=4?mx:0;
+      for(let m=m0;m<=m1;m++) for(let j=1;j<S.n;j++){const p=ray((m+j/S.n)*S.lam/S.d); if(p) addLine(p,true);}
+    }
+  }
+  nodeGroup.visible=S.showNodes;
+}
+
+/* 觀察點 P */
+const probe=new THREE.Group(); scene.add(probe);
+{
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,2.7,8),new THREE.MeshBasicMaterial({color:0xffc24b,transparent:true,opacity:.55}));
+  pole.position.y=0.35; probe.add(pole);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(0.22,0.3,32),new THREE.MeshBasicMaterial({color:0xffc24b,side:THREE.DoubleSide,depthTest:false,transparent:true,opacity:.9}));
+  ring.rotation.x=-Math.PI/2; ring.position.y=0.02; ring.renderOrder=6; probe.add(ring);
+}
+const bead=new THREE.Mesh(new THREE.SphereGeometry(0.14,20,14),new THREE.MeshBasicMaterial({color:0xffe08a}));
+scene.add(bead);
+const pathGeo=[],pathLines=[];
+for(let k=0;k<NMAX;k++){
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
+  const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:new THREE.Color(SC[k]),depthTest:false,transparent:true,opacity:.95}));
+  l.renderOrder=7; l.frustumCulled=false; scene.add(l); pathGeo.push(g); pathLines.push(l);
+}
+/* 各縫到 P 的路徑上的波形(Eₖ 沿路徑的樣子,立在水面上方) */
+const NP=100;
+const wav=SC.map(c=>{
+  const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(NP*3),3));
+  const line=new THREE.Line(lg,new THREE.LineBasicMaterial({color:new THREE.Color(c),depthTest:false})); line.renderOrder=9; line.frustumCulled=false;
+  const rg=new THREE.BufferGeometry(); rg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(NP*6),3));
+  const ri=[]; for(let k=0;k<NP-1;k++){const a=2*k,b=a+1,cc=a+2,d=a+3; ri.push(a,b,cc,b,d,cc);}
+  rg.setIndex(ri);
+  const rib=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({color:new THREE.Color(c),transparent:true,opacity:.3,side:THREE.DoubleSide,depthTest:false,depthWrite:false}));
+  rib.renderOrder=8; rib.frustumCulled=false;
+  scene.add(line,rib); return {line,rib,lg,rg};
+});
+let HS=H, HSW=H;
+const WAVEMAX=8;
+let PR={r:[],a:[],k:1,tot:0,delta:0};
+function updateWaves(){
+  for(let i=0;i<NMAX;i++){
+    const w=wav[i], vis=i<S.n&&S.n<=WAVEMAX&&S.showPaths&&ON[i]; w.line.visible=vis; w.rib.visible=vis; if(!vis) continue;
+    const lp=w.lg.attributes.position.array, rp=w.rg.attributes.position.array;
+    const r=PR.r[i], k=PR.k, zs=slitZ(i);
+    for(let j=0;j<NP;j++){
+      const u=j/(NP-1), x=u*S.px, z=zs+u*(S.pz-zs), sd=u*r;
+      const env=PR.a[i]*Math.sqrt((1+r/R0)/(1+sd/R0));
+      const y=4*HSW*env*Math.sin(k*sd-S.phase);   // 路徑上的波形放大 4 倍,比較看得清楚
+      lp[3*j]=x; lp[3*j+1]=y; lp[3*j+2]=z;
+      rp[6*j]=x; rp[6*j+1]=0; rp[6*j+2]=z; rp[6*j+3]=x; rp[6*j+4]=y; rp[6*j+5]=z;
+    }
+    w.lg.attributes.position.needsUpdate=true; w.rg.attributes.position.needsUpdate=true;
+  }
+}
+
+/* ---------- 場的預先計算 ---------- */
+function rebuildField(){
+  const k=TAU/S.lam, zs=[];
+  for(let i=0;i<S.n;i++) if(ON[i]) zs.push(slitZ(i));
+  const m=zs.length;
+  for(let n=0;n<N;n++){
+    const x=gx[n], z=gz[n];
+    if(x>S.L){KIND[n]=2;SS[n]=0;CC[n]=0;continue;}
+    if(x<0){KIND[n]=1;SS[n]=Math.sin(k*x);CC[n]=Math.cos(k*x);continue;}
+    KIND[n]=0; let s=0,c=0;
+    for(let q=0;q<m;q++){const a=srcA(x,z,zs[q]), ph=k*_r; s+=a*Math.sin(ph); c+=a*Math.cos(ph);}
+    SS[n]=s; CC[n]=c;
+  }
+}
+const PALB=[[.03,.11,.27],[.09,.36,.67],[.78,.92,1]];
+const makePal=c=>[c.map(v=>v*.14),c.map(v=>v*.6),c.map(v=>v+(1-v)*.78)];
+const PALS=SCN.map(makePal);
+const DEAD=[.035,.06,.1];
+function updateSurface(){
+  const wt=S.phase, cw=Math.cos(wt), sw=Math.sin(wt);
+  let na=0,first=0;
+  for(let i=0;i<S.n;i++) if(ON[i]){ if(!na) first=i; na++; }
+  const pal=na===1?PALS[first]:PALB, sc=0.5/Math.max(1,0.8*na);
+  HS=hScale(na); HSW=hScaleW(na);
+  const lo=pal[0],mi=pal[1],hi=pal[2];
+  for(let n=0;n<N;n++){
+    const kd=KIND[n]; let y=0,r,g,b;
+    if(kd===2){ r=DEAD[0];g=DEAD[1];b=DEAD[2]; }
+    else{
+      y=SS[n]*cw-CC[n]*sw;
+      let u=0.5+y*sc; u=u<0?0:u>1?1:u;
+      if(u<0.5){const t=u*2;r=lo[0]+(mi[0]-lo[0])*t;g=lo[1]+(mi[1]-lo[1])*t;b=lo[2]+(mi[2]-lo[2])*t;}
+      else{const t=(u-0.5)*2;r=mi[0]+(hi[0]-mi[0])*t;g=mi[1]+(hi[1]-mi[1])*t;b=mi[2]+(hi[2]-mi[2])*t;}
+    }
+    const o=3*n; pos[o+1]=y*(kd===1?H:HS); colr[o]=r; colr[o+1]=g; colr[o+2]=b;
+  }
+  posAttr.needsUpdate=true; colAttr.needsUpdate=true;
+  geo.computeVertexNormals();
+}
+
+/* ---------- 螢幕強度(時間平均) ---------- */
+function intensityAt(z,mask){
+  const k=TAU/S.lam; let re=0,im=0;
+  for(let i=0;i<S.n;i++){ if(!mask[i]) continue;
+    const a=srcA(S.L,z,slitZ(i)), ph=k*_r; re+=a*Math.cos(ph); im+=a*Math.sin(ph); }
+  return re*re+im*im;
+}
+function ratioAt(z){            // 全部縫打開時,|E| 佔最大值的比例
+  const k=TAU/S.lam; let re=0,im=0,tot=0;
+  for(let i=0;i<S.n;i++){ const a=srcA(S.L,z,slitZ(i)), ph=k*_r; re+=a*Math.cos(ph); im+=a*Math.sin(ph); tot+=a; }
+  return Math.hypot(re,im)/tot;
+}
+function updateScreen(){
+  let imax=1e-6;
+  for(let i=0;i<=320;i++){imax=Math.max(imax,intensityAt(-ZMAX+2*ZMAX*i/320,ALL));}
+  const g=texCv.getContext('2d'), img=g.createImageData(TEXW,8);
+  for(let i=0;i<TEXW;i++){
+    const z=-ZMAX+2*ZMAX*i/(TEXW-1);
+    const b=Math.pow(clamp(intensityAt(z,ON)/imax,0,1),0.55);
+    const r=10+245*b, gg=14+218*b, bb=26+164*b;
+    for(let y=0;y<8;y++){const o=(y*TEXW+i)*4;img.data[o]=r;img.data[o+1]=gg;img.data[o+2]=bb;img.data[o+3]=255;}
+  }
+  g.putImageData(img,0,0); tex.needsUpdate=true;
+  screenMesh.position.set(S.L,0.2,0); frame.position.copy(screenMesh.position);
+  const plot=clamp(XMAX-S.L-0.4,1,5.5), x0=S.L+0.06;
+  for(let i=0;i<NS;i++){
+    const z=-ZMAX+2*ZMAX*i/(NS-1), v=Math.min(1,intensityAt(z,ON)/imax)*plot;
+    curvePos[3*i]=x0+v; curvePos[3*i+1]=0.03; curvePos[3*i+2]=z;
+    hatchPos[6*i]=x0; hatchPos[6*i+1]=0.03; hatchPos[6*i+2]=z;
+    hatchPos[6*i+3]=x0+v; hatchPos[6*i+4]=0.03; hatchPos[6*i+5]=z;
+  }
+  curveGeo.attributes.position.needsUpdate=true; hatchGeo.attributes.position.needsUpdate=true;
+  curve.visible=S.showScreen; hatch.visible=S.showScreen;
+}
+
+/* ---------- 觀察點的量 ---------- */
+function computeProbe(){
+  const x=S.px,z=S.pz,k=TAU/S.lam, r=[],a=[]; let tot=0;
+  for(let i=0;i<S.n;i++){a.push(srcA(x,z,slitZ(i)));r.push(_r);tot+=a[i];}
+  const delta=S.n>=2?wrapPi(k*(r[1]-r[0])):0;
+  PR={r,a,k,tot,delta};
+}
+function sumPhasor(){            // 目前開著的縫在 P 的合成(振幅)
+  let re=0,im=0;
+  for(let i=0;i<S.n;i++){ if(!ON[i]) continue; const th=PR.k*PR.r[i]; re+=PR.a[i]*Math.cos(th); im+=PR.a[i]*Math.sin(th); }
+  return Math.hypot(re,im);
+}
+function findZ2(t){              // 兩縫:|r₂−r₁| = t 的螢幕位置(精確)
+  if(t<=0) return 0;
+  const z0=slitZ(0), z1=slitZ(1);
+  const f=z=>Math.abs(Math.hypot(S.L,z-z1)-Math.hypot(S.L,z-z0));
+  let lo=0,hi=7.5; if(f(hi)<t) return null;
+  for(let i=0;i<40;i++){const m=(lo+hi)/2; if(f(m)<t) lo=m; else hi=m;}
+  return (lo+hi)/2;
+}
+function scanFringe(){           // 三縫以上:掃描螢幕,找最深的第一個暗紋與最亮的第一個亮紋
+  const mins=[],maxs=[]; let prev=ratioAt(0), dir=0;
+  for(let z=0.01;z<=7.5;z+=0.01){
+    const r=ratioAt(z), d=r-prev;
+    if(d>1e-7){ if(dir<0) mins.push([z-0.01,prev]); dir=1; }
+    else if(d<-1e-7){ if(dir>0&&z-0.01>0.3) maxs.push([z-0.01,prev]); dir=-1; }
+    prev=r;
+  }
+  let zMin=null,zMax=null;
+  if(mins.length){const m=Math.min(...mins.map(a=>a[1])); zMin=mins.find(a=>a[1]<=m+0.1)[0];}
+  if(maxs.length){const m=Math.max(...maxs.map(a=>a[1])); if(m>0.5) zMax=maxs.find(a=>a[1]>=m*0.85)[0];}
+  return {zMin,zMax};
+}
+function findOrder(m){
+  if(m===0) return 0;
+  if(S.n<2) return null;
+  if(S.n===2) return findZ2(m*S.lam);
+  const f=scanFringe(); return m===0.5?f.zMin:f.zMax;
+}
+const fx=(v,n)=>(Math.abs(v)<5e-3?0:v).toFixed(n);
+function updateReadouts(){
+  computeProbe();
+  const lam=S.lam;
+  $('ro_r1').textContent=fx(PR.r[0]/lam,2)+' λ';
+  $('ro_r2').textContent=S.n>=2?fx(PR.r[1]/lam,2)+' λ':'–';
+  $('ro_dl').textContent=S.n>=2?fx((PR.r[1]-PR.r[0])/lam,2)+' λ':'–';
+  $('ro_dg').textContent=S.n>=2?fx(PR.delta*180/Math.PI,0)+'°':'–';
+  const na=nActive(), amp=sumPhasor(), R=PR.tot>0?amp/PR.tot:0;
+  $('ro_amp').textContent=fx(R*100,0)+' %';
+  $('ro_bar').style.width=(R*100)+'%';
+  const chip=$('ro_chip');
+  if(na===0){ chip.textContent='沒有開啟的縫'; chip.className='chip'; }
+  else if(na===1){ chip.textContent='只有一道波,沒有干涉'; chip.className='chip'; }
+  else if(R>0.9){ chip.textContent='相長 · 亮紋'; chip.className='chip hi'; }
+  else if(R<0.12){ chip.textContent='相消 · 暗紋'; chip.className='chip lo'; }
+  else { chip.textContent='部分相消'; chip.className='chip'; }
+  $('o_px').textContent=S.px.toFixed(2); $('o_pz').textContent=S.pz.toFixed(2);
+  $('px').value=S.px; $('pz').value=S.pz;
+}
+function updateFringeNote(){
+  const el=$('fringe');
+  if(S.n===1){ el.textContent='單縫:螢幕上沒有雙縫條紋'; return; }
+  const ap=S.lam*S.L/S.d;
+  const dn='相鄰縫距 d = D/(N−1) = '+S.d.toFixed(2)+(S.d<S.lam?'(小於 λ)':'');
+  let t;
+  if(S.n===2){
+    const z1=findZ2(S.lam);
+    t=z1===null?'縫距小於波長,螢幕上只有一個亮紋'
+      :'第一亮紋 z₁ = '+z1.toFixed(2)+'(近似 λL/d = '+ap.toFixed(2)+')';
+  } else {
+    const f=scanFringe();
+    if(f.zMax!==null) t='主極大 z₁ = '+f.zMax.toFixed(2)+'(近似 λL/d = '+ap.toFixed(2)+')';
+    else if(S.d<S.lam) t='只剩中央亮紋'+(f.zMin!==null?';第一暗紋 z = '+f.zMin.toFixed(2)+'(近似 λL/D = '+(S.lam*S.L/S.D).toFixed(2)+')':'');
+    else t='第一主極大在螢幕範圍之外';
+  }
+  el.textContent=dn+'\n'+t;
+}
+
+/* ---------- 標籤 ---------- */
+const tagsEl=$('tags');
+const tagDefs=[];
+for(let k=0;k<NMAX;k++){
+  tagDefs.push({t:'縫 '+(k+1),c:'sl1',color:SC[k],v:()=>new THREE.Vector3(0,1.15,slitZ(k)),show:()=>k<S.n&&(S.n<=8||k===0||k===S.n-1)});
+}
+tagDefs.push(
+  {t:'入射平面波 →',c:'',v:()=>new THREE.Vector3(-4.2,0.7,-5.6)},
+  {t:'螢幕',c:'',v:()=>new THREE.Vector3(S.L,1.5,ZMAX-1.2)},
+  {t:'P',c:'p',v:()=>new THREE.Vector3(S.px,1.75,S.pz)},
+  {t:'強度 I(z)',c:'',v:()=>new THREE.Vector3(S.L+2.4,0.3,-ZMAX+0.4),show:()=>S.showScreen});
+tagDefs.forEach(o=>{const el=document.createElement('div');el.className='tag '+o.c;el.textContent=o.t;if(o.color)el.style.color=o.color;tagsEl.appendChild(el);o.el=el;});
+function updateTags(){
+  const w=stage.clientWidth,h=stage.clientHeight;
+  for(const o of tagDefs){
+    const v=o.v().project(camera);
+    const ok=v.z<1 && (!o.show||o.show());
+    o.el.style.display=ok?'':'none';
+    if(ok) o.el.style.transform='translate('+((v.x*.5+.5)*w).toFixed(1)+'px,'+((-v.y*.5+.5)*h).toFixed(1)+'px) translate(-50%,-120%)';
+  }
+}
+
+/* ---------- 觀察點的圖 ---------- */
+const phC=$('ph'), scC=$('sc');
+function fit(c){
+  const dpr=Math.min(window.devicePixelRatio||1,2), w=c.clientWidth, h=c.clientHeight;
+  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);}
+  const g=c.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); return {g,w,h};
+}
+function arrow(g,x0,y0,x1,y1,color,lw){
+  const dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy); if(len<0.5) return;
+  const hl=Math.min(5+lw*2.2,len*0.45), an=Math.atan2(dy,dx);
+  g.strokeStyle=color; g.fillStyle=color; g.lineWidth=lw; g.lineCap='round';
+  g.beginPath(); g.moveTo(x0,y0); g.lineTo(x1-Math.cos(an)*hl*0.6,y1-Math.sin(an)*hl*0.6); g.stroke();
+  g.beginPath(); g.moveTo(x1,y1); g.lineTo(x1-hl*Math.cos(an-0.42),y1-hl*Math.sin(an-0.42));
+  g.lineTo(x1-hl*Math.cos(an+0.42),y1-hl*Math.sin(an+0.42)); g.closePath(); g.fill();
+}
+const MONO="11px 'IBM Plex Mono',ui-monospace,monospace";
+function drawPhasor(){
+  const {g,w,h}=fit(phC); g.clearRect(0,0,w,h);
+  const axX=w-9, cx=(w-18)/2, cy=h/2, R=Math.min(cx,cy)-12;
+  const s=PR.tot>0?R/PR.tot:0;
+  const f=clamp(R/71,1,2.6), sf=Math.sqrt(f), PF=(11*sf).toFixed(1)+"px 'IBM Plex Mono',ui-monospace,monospace";
+  g.strokeStyle=COL.line; g.lineWidth=1;
+  g.beginPath(); g.moveTo(cx-R-4,cy); g.lineTo(cx+R+4,cy); g.moveTo(cx,cy-R-4); g.lineTo(cx,cy+R+4); g.stroke();
+  g.setLineDash([3,4]); g.beginPath(); g.arc(cx,cy,R,0,TAU); g.stroke(); g.setLineDash([]);
+  g.beginPath(); g.moveTo(axX,cy-R); g.lineTo(axX,cy+R); g.stroke();
+  // 依序首尾相接
+  let px=cx, py=cy; const tips=[], dots=[];
+  for(let i=0;i<S.n;i++){
+    if(!ON[i]) continue;
+    const th=PR.k*PR.r[i]-S.phase, vx=PR.a[i]*Math.cos(th)*s, vy=PR.a[i]*Math.sin(th)*s;
+    tips.push({i,th,x0:px,y0:py,x1:px+vx,y1:py-vy});
+    dots.push({y:vy,c:SC[i]});
+    px+=vx; py-=vy;
+  }
+  // 相位差 δ 的弧(畫在第 1 個相量的尖端,量 E₁ 到 E₂ 的夾角)
+  if(S.n>=2&&ON[0]&&ON[1]&&tips.length>=2&&Math.abs(PR.delta)>0.02){
+    const t1=tips[0].th;
+    g.strokeStyle=COL.probe; g.lineWidth=1.5*sf; g.beginPath();
+    g.arc(tips[0].x1,tips[0].y1,15*f,-t1,-(t1+PR.delta),PR.delta>0); g.stroke();
+    const mid=-(t1+PR.delta/2); g.font=PF; g.fillStyle=COL.probe;
+    g.fillText('δ',tips[0].x1+25*f*Math.cos(mid)-3,tips[0].y1+25*f*Math.sin(mid)+4);
+  }
+  if(tips.length){
+    g.setLineDash([2,3]); g.strokeStyle=COL.sum; g.lineWidth=1;
+    g.beginPath(); g.moveTo(px,py); g.lineTo(axX,py); g.stroke(); g.setLineDash([]);
+  }
+  for(const t of tips) arrow(g,t.x0,t.y0,t.x1,t.y1,SC[t.i],(S.n>8?1.2:2)*sf);
+  arrow(g,cx,cy,px,py,COL.sum,2.6*sf);
+  const dot=(y,c)=>{g.fillStyle=c;g.beginPath();g.arc(axX,cy-y,3.2*sf,0,TAU);g.fill();};
+  let ysum=0; for(const d of dots){dot(d.y,d.c);ysum+=d.y;} if(dots.length) dot(ysum,COL.sum);
+  g.font=PF; g.fillStyle=COL.sum; g.fillText('E',cx+(px-cx)*0.5-16*sf,cy+(py-cy)*0.5-6*sf);
+  g.fillStyle=COL.dim; g.fillText('y',axX-3,cy-R-5);
+}
+function drawScope(){
+  const {g,w,h}=fit(scC); g.clearRect(0,0,w,h);
+  const pl=8,pr=14,top=8,bot=20, pw=w-pl-pr, ph=h-top-bot, cy=top+ph/2;
+  const ymax=Math.max(PR.tot*1.12,1e-3);
+  g.strokeStyle=COL.line; g.lineWidth=1;
+  g.beginPath(); g.moveTo(pl,cy); g.lineTo(pl+pw,cy);
+  for(let i=0;i<=2;i++){g.moveTo(pl+pw*i/2,top);g.lineTo(pl+pw*i/2,top+ph);} g.stroke();
+  g.font=MONO; g.fillStyle=COL.dim; g.textAlign='left'; g.fillText('−2T',pl,h-5);
+  g.textAlign='center'; g.fillText('−T',pl+pw/2,h-5); g.textAlign='right'; g.fillText('現在',pl+pw+pr-2,h-5); g.textAlign='left';
+  const span=2*TAU, n=200, act=[];
+  for(let i=0;i<S.n;i++) if(ON[i]) act.push(i);
+  const fi=(i,s)=>PR.a[i]*Math.sin(PR.k*PR.r[i]-S.phase+s);
+  const trace=(fn,c,lw)=>{g.strokeStyle=c;g.lineWidth=lw;g.lineJoin='round';g.beginPath();
+    for(let j=0;j<=n;j++){const s=span*(1-j/n),X=pl+pw*j/n,Y=cy-fn(s)/ymax*(ph/2);j?g.lineTo(X,Y):g.moveTo(X,Y);} g.stroke();};
+  const lw=act.length>12?0.7:act.length>3?1:1.5;
+  for(const i of act) trace(s=>fi(i,s),SC[i],lw);
+  const sum=s=>{let y=0;for(const i of act) y+=fi(i,s);return y;};
+  trace(sum,COL.sum,2.4);
+  const dot=(v,c)=>{g.fillStyle=c;g.beginPath();g.arc(pl+pw,cy-v/ymax*(ph/2),3.4,0,TAU);g.fill();};
+  for(const i of act) dot(fi(i,0),SC[i]);
+  dot(sum(0),COL.sum);
+}
+
+/* ---------- 每個畫面 ---------- */
+function updateProbeObjects(){
+  const k=PR.k, wt=S.phase; let y=0;
+  for(let i=0;i<S.n;i++) if(ON[i]) y+=PR.a[i]*Math.sin(k*PR.r[i]-wt);
+  y*=HS;
+  probe.position.set(S.px,0,S.pz); bead.position.set(S.px,y,S.pz);
+  for(let i=0;i<NMAX;i++){
+    const l=pathLines[i];
+    if(i>=S.n){l.visible=false;continue;}
+    const a=pathGeo[i].attributes.position.array;
+    a.set([0,0.02,slitZ(i),S.px,0.02,S.pz]); pathGeo[i].attributes.position.needsUpdate=true;
+    l.visible=S.showPaths&&ON[i];
+  }
+  updateWaves();
+}
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  if(S.playing) S.phase=(S.phase+TAU*V/S.lam*dt*S.speed)%TAU;
+  if(document.activeElement!==$('phase')) $('phase').value=Math.round(S.phase*180/Math.PI)%360;
+  $('o_ph').textContent=Math.round(S.phase*180/Math.PI)%360+'°';
+  updateSurface(); updateProbeObjects(); drawPhasor(); drawScope(); updateTags();
+  renderer.render(scene,camera);
+  requestAnimationFrame(loop);
+}
+
+/* ---------- 各種更新入口 ---------- */
+const NAMES=['','單狹縫','雙狹縫干涉','三狹縫干涉','四狹縫干涉','五狹縫干涉','六狹縫干涉'];
+function refreshGeometry(){
+  // 固定最大間距 D:相鄰縫距 d = D/(N−1);縫寬跟著縮小,避免相鄰的縫重疊
+  S.d=S.n>1?S.D/(S.n-1):S.D; SLITW=S.n>1?Math.min(0.5,0.55*S.d):0.5;
+  S.px=clamp(S.px,0.8,S.L); $('px').max=S.L;
+  layoutBarrier(); rebuildField(); rebuildNodes(); updateScreen(); updateFringeNote(); updateReadouts();
+}
+function buildToggles(){
+  const box=$('tgl'); box.innerHTML='';
+  for(let k=0;k<S.n;k++){
+    const b=document.createElement('button'); b.type='button'; b.className='btn';
+    b.setAttribute('aria-pressed',ON[k]?'true':'false');
+    b.innerHTML='<i class="dot" style="background:'+SC[k]+'"></i>'+(S.n>6?'':'縫 ')+(k+1);
+    b.addEventListener('click',()=>{ON[k]=!ON[k];b.setAttribute('aria-pressed',ON[k]?'true':'false');applyOn();});
+    box.appendChild(b);
+  }
+  let lg='<span class="lg">';
+  if(S.n<=8) for(let k=0;k<S.n;k++) lg+='<span style="color:'+SC[k]+'">E'+sub(k)+'</span>';
+  else lg+='<span style="color:'+SC[0]+'">E₁</span><span style="color:'+SC[1]+'">E₂</span><span>…</span><span style="color:'+SC[S.n-1]+'">E'+sub(S.n-1)+'</span>';
+  $('lgSlits').innerHTML=lg+'</span>';
+  let sum='E = ';
+  if(S.n<=4) for(let k=0;k<S.n;k++) sum+=(k?' + ':'')+'E'+sub(k);
+  else sum+='E₁ + E₂ + … + E'+sub(S.n-1);
+  $('lgSum').textContent=sum;
+  $('title').textContent=NAMES[S.n]||(S.n+' 狹縫干涉');
+}
+function applyOn(){ layoutBarrier(); rebuildField(); updateScreen(); updateReadouts(); }
+function setN(n){ S.n=n; buildToggles(); refreshGeometry(); }
+
+/* ---------- 控制項 ---------- */
+const bindRange=(id,out,fmt,fn)=>{const el=$(id),o=$(out);const upd=()=>{o.textContent=fmt(+el.value)};
+  el.addEventListener('input',()=>{upd();fn(+el.value)});upd();};
+bindRange('nslit','o_n',v=>String(v),v=>{setN(v);});
+bindRange('lam','o_lam',v=>v.toFixed(2),v=>{S.lam=v;refreshGeometry();});
+bindRange('D','o_D',v=>v.toFixed(1),v=>{S.D=v;refreshGeometry();});
+bindRange('L','o_L',v=>v.toFixed(1),v=>{S.L=v;refreshGeometry();});
+bindRange('speed','o_sp',v=>'×'+v.toFixed(2),v=>{S.speed=v;});
+$('phase').addEventListener('input',e=>{S.phase=(+e.target.value)*Math.PI/180;});
+$('px').addEventListener('input',e=>{S.px=+e.target.value;updateReadouts();});
+$('pz').addEventListener('input',e=>{S.pz=+e.target.value;updateReadouts();});
+$('play').addEventListener('click',()=>{S.playing=!S.playing;$('play').textContent=S.playing?'暫停':'播放';});
+$('resetCam').addEventListener('click',resetCam);
+$('allOn').addEventListener('click',()=>{for(let k=0;k<NMAX;k++)ON[k]=true;buildToggles();applyOn();});
+$('showNodes').addEventListener('change',e=>{S.showNodes=e.target.checked;nodeGroup.visible=S.showNodes;});
+$('showPaths').addEventListener('change',e=>{S.showPaths=e.target.checked;});
+$('showScreen').addEventListener('change',e=>{S.showScreen=e.target.checked;screenMesh.visible=frame.visible=S.showScreen;updateScreen();});
+document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>{
+  const m=parseFloat(b.dataset.goto), msg=$('msg');
+  if(S.n<2&&m>0){ msg.textContent='單縫沒有干涉條紋。'; return; }
+  const z=findOrder(m);
+  if(z===null){ msg.textContent='目前的縫距與波長下,螢幕範圍內沒有這個條紋。'; return; }
+  msg.textContent=''; S.px=S.L; S.pz=z; updateReadouts();
+}));
+$('play').textContent=S.playing?'暫停':'播放';
+
+/* ---------- 視角與拖動 ---------- */
+const el=renderer.domElement, pts=new Map(), rc=new THREE.Raycaster(), plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+let mode=null, pinch0=0;
+const ndc=e=>{const r=el.getBoundingClientRect();return new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);};
+function hitProbe(e){
+  const r=el.getBoundingClientRect();
+  for(const p of [new THREE.Vector3(S.px,0,S.pz),bead.position]){
+    const v=p.clone().project(camera);
+    const dx=(v.x*.5+.5)*r.width+r.left-e.clientX, dy=(-v.y*.5+.5)*r.height+r.top-e.clientY;
+    if(Math.hypot(dx,dy)<34) return true;
+  }
+  return false;
+}
+function movePTo(e){
+  rc.setFromCamera(ndc(e),camera);
+  const hit=new THREE.Vector3(); if(!rc.ray.intersectPlane(plane,hit)) return;
+  S.px=clamp(hit.x,0.8,S.L); S.pz=clamp(hit.z,-7.5,7.5); $('msg').textContent=''; updateReadouts();
+}
+const pdist=()=>{const a=[...pts.values()];return Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);};
+el.addEventListener('pointerdown',e=>{
+  el.setPointerCapture(e.pointerId); pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pts.size===1){ mode=hitProbe(e)?'probe':'orbit'; if(mode==='probe'){el.style.cursor='grabbing';movePTo(e);} }
+  else if(pts.size===2){ mode='pinch'; pinch0=pdist(); }
+});
+el.addEventListener('pointermove',e=>{
+  const p=pts.get(e.pointerId);
+  if(!p){ if(e.pointerType==='mouse') el.style.cursor=hitProbe(e)?'grab':'default'; return; }
+  const dx=e.clientX-p.x, dy=e.clientY-p.y; p.x=e.clientX; p.y=e.clientY;
+  if(mode==='pinch'&&pts.size>=2){ const d=pdist(); if(pinch0>0) cam.R=clamp(cam.R*pinch0/d,8,60); pinch0=d; camUpdate(); }
+  else if(mode==='probe'){ movePTo(e); }
+  else if(mode==='orbit'){ cam.yaw-=dx*0.006; cam.pitch=clamp(cam.pitch+dy*0.006,0.08,1.5); camUpdate(); }
+});
+const up=e=>{pts.delete(e.pointerId); if(pts.size===0){mode=null;el.style.cursor='default';} else if(pts.size===1){mode='orbit';}};
+el.addEventListener('pointerup',up); el.addEventListener('pointercancel',up);
+el.addEventListener('wheel',e=>{e.preventDefault();cam.R=clamp(cam.R*Math.exp(e.deltaY*0.001),8,60);camUpdate();},{passive:false});
+
+/* ---------- 尺寸 ---------- */
+function resize(){
+  const w=stage.clientWidth,h=stage.clientHeight; if(!w||!h) return;
+  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+if(window.ResizeObserver) new ResizeObserver(resize).observe(stage); else window.addEventListener('resize',resize);
+
+/* ---------- 啟動 ---------- */
+resize(); resetCam();
+buildToggles(); refreshGeometry();
+requestAnimationFrame(t=>{last=t;loop(t);});
+})();
+</script>
+
+</body></html>
