@@ -72,7 +72,7 @@
     <label class="r"><input type="checkbox" id="radOnly" checked>僅顯示輻射場（加速度項）</label>
     <label class="r"><input type="checkbox" id="wEnv" checked>顯示包絡線</label>
     <div class="sl"><div class="top"><span>向量取樣數</span><span id="vN"></span></div>
-      <input id="wn" type="range" min="5" max="40" step="1" value="13"></div>
+      <input id="wn" type="range" min="5" max="40" step="1" value="25"></div>
     <div class="sl"><div class="top"><span>向量增益</span><span id="vG"></span></div>
       <input id="gain" type="range" min="0.2" max="8" step="0.1" value="1"></div>
   </div>
@@ -674,7 +674,7 @@
     mode = 'friction'; axis = 1; amp = 60; freq = 0.6; speedFrac = 0.5; duration = 0.6;
     nE = 1; nB = 1; sign = -1; showB = true; showV = false; paused = false; autoRot = false;
     showW = true; radOnly = true; wplane = 4; wGain = 1; wEnv = true; WG = 13;
-    $('showW').checked = true; $('radOnly').checked = true; $('wEnv').checked = true; $('wn').value = 13; $('wplane').value = 4; $('gain').value = 1;
+    $('showW').checked = true; $('radOnly').checked = true; $('wEnv').checked = true; $('wn').value = 25; $('wplane').value = 4; $('gain').value = 1;
     dE = fib(nE); dB = fib(nB);
     document.querySelector('input[name=mode][value=friction]').checked = true;
     document.querySelector('input[name=sign][value="-1"]').checked = true;
