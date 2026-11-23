@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>電荷輻射</title>
+<style>
+  html, body { margin:0; height:100%; background:#000; overflow:hidden; color:#fff;
+    font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif; user-select:none; }
+  canvas { position:absolute; left:0; top:0; touch-action:none; }
+  #panel { position:absolute; right:10px; top:10px; width:196px; max-height:calc(100% - 20px); overflow:auto;
+    box-sizing:border-box; background:rgba(28,38,72,.92); border:1px solid #6f84bd; border-radius:8px;
+    padding:10px 12px; font-size:14px; }
+  #panel label.r { display:block; padding:3px 0; cursor:pointer; }
+  #panel input[type=radio] { margin-right:6px; }
+  .sl { margin-top:8px; }
+  .sl .top { display:flex; justify-content:space-between; font-size:13px; }
+  .sl input { width:100%; margin:2px 0 0; }
+  hr { border:0; border-top:1px solid #50639a; margin:10px 0; }
+  button { background:#3b5bb5; color:#fff; border:1px solid #8aa0e0; border-radius:5px; padding:5px 8px;
+    font-size:14px; cursor:pointer; font-family:inherit; }
+  button:hover { background:#4d70d8; }
+  .btns { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+  #title { position:absolute; left:14px; top:10px; font-size:20px; opacity:.85; pointer-events:none; }
+  .hide { display:none !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title">電荷輻射</div>
+<div id="panel">
+  <label class="r"><input type="radio" name="mode" value="friction" checked>手動操作</label>
+  <label class="r"><input type="radio" name="mode" value="nofriction">手動操作（無摩擦力）</label>
+  <label class="r"><input type="radio" name="mode" value="sin">正弦曲線</label>
+  <label class="r"><input type="radio" name="mode" value="linear">線性</label>
+  <label class="r"><input type="radio" name="mode" value="circular">圓形</label>
+  <label class="r"><input type="radio" name="mode" value="bump">碰撞</label>
+
+  <div id="slAmp" class="sl hide"><div class="top"><span>強度</span><span id="vAmp"></span></div>
+    <input id="amp" type="range" min="0" max="150" step="1" value="60"></div>
+  <div id="slFreq" class="sl hide"><div class="top"><span>頻率</span><span id="vFreq"></span></div>
+    <input id="freq" type="range" min="0.1" max="2" step="0.05" value="0.6"></div>
+  <div id="slSpeed" class="sl hide"><div class="top"><span>速度</span><span id="vSpeed"></span></div>
+    <input id="speed" type="range" min="0" max="0.9" step="0.01" value="0.5"></div>
+  <div id="slDur" class="sl hide"><div class="top"><span>持續時間</span><span id="vDur"></span></div>
+    <input id="dur" type="range" min="0.1" max="1.5" step="0.05" value="0.6"></div>
+
+  <div class="btns">
+    <button id="stop">靜止電荷</button>
+  </div>
+  <hr>
+  <label class="r"><input type="checkbox" id="showV">顯示速度</label>
+  <label class="r"><input type="checkbox" id="pause">暫停</label>
+  <div class="btns">
+    <button id="restart">重新開始</button>
+    <button id="reset">重置</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const C = 300;               // 光速 (px/s)
+  const DT = 0.01;             // 固定時間步長 (s)
+  const CAP = 900;             // 歷史取樣數 (9 秒)
+  const N_RAYS = 24;           // 電場線數量
+  const ARROW_EVERY = 120;      // 每幾個取樣放一個箭頭
+  const VMAX = 0.95 * C;
+  const PANEL_W = 214;
+
+  const cvs = document.getElementById('c');
+  const ctx = cvs.getContext('2d');
+  let W, H, dpr, cx, cy, bx0, bx1, by0, by1;
+
+  // ---- 狀態 ----
+  let mode = 'friction';
+  let amp = 60, freq = 0.6, speedFrac = 0.5, duration = 0.6;
+  let showV = false, paused = false;
+  let px, py, mvx = 0, mvy = 0, mt = 0, phase = 0, ampEff = 60, linDir = 1, theta = 0;
+  let dragging = false, tx = 0, ty = 0, offX = 0, offY = 0;
+
+  // 歷史 (環狀緩衝)
+  const hT = new Float64Array(CAP), hX = new Float64Array(CAP), hY = new Float64Array(CAP);
+  const hVX = new Float64Array(CAP), hVY = new Float64Array(CAP), hN = new Int32Array(CAP);
+  let head = -1, count = 0, stepN = 0, simT = 0;
+
+  function pushSample(t, x, y, vx, vy, n) {
+    head = (head + 1) % CAP;
+    hT[head] = t; hX[head] = x; hY[head] = y; hVX[head] = vx; hVY[head] = vy; hN[head] = n;
+    if (count < CAP) count++;
+  }
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    W = window.innerWidth; H = window.innerHeight;
+    cvs.width = W * dpr; cvs.height = H * dpr;
+    cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+    cx = Math.max(150, (W - PANEL_W) / 2); cy = H / 2;
+    bx0 = 20; bx1 = Math.max(120, W - PANEL_W - 10); by0 = 20; by1 = H - 20;
+    restart();
+  }
+
+  function restart() {
+    mt = 0; phase = 0; ampEff = amp; linDir = 1; theta = 0;
+    mvx = mvy = 0; dragging = false;
+    px = cx; py = cy;
+    if (mode === 'circular') { px = cx + 100; py = cy; }
+    if (mode === 'bump') { px = cx - 120; py = cy; }
+    head = -1; count = 0; simT = 0; stepN = -(CAP - 1);
+    for (let i = 0; i < CAP; i++) {
+      pushSample(-(CAP - 1 - i) * DT, px, py, 0, 0, stepN++);
+    }
+    stepN--; // 最後一筆的編號
+  }
+
+  function step() {
+    const ox = px, oy = py;
+    mt += DT;
+    if (mode === 'friction' || mode === 'nofriction') {
+      if (dragging) {
+        let nvx = (tx - px) * 12, nvy = (ty - py) * 12;
+        const sp = Math.hypot(nvx, nvy);
+        if (sp > VMAX) { nvx *= VMAX / sp; nvy *= VMAX / sp; }
+        mvx = nvx; mvy = nvy;
+      } else if (mode === 'friction') {
+        const f = Math.exp(-3 * DT);
+        mvx *= f; mvy *= f;
+        if (Math.hypot(mvx, mvy) < 0.5) { mvx = mvy = 0; }
+      }
+      px += mvx * DT; py += mvy * DT;
+      if (mode === 'nofriction' && !dragging) {
+        if (px < bx0) { px = bx0; mvx = Math.abs(mvx); }
+        if (px > bx1) { px = bx1; mvx = -Math.abs(mvx); }
+        if (py < by0) { py = by0; mvy = Math.abs(mvy); }
+        if (py > by1) { py = by1; mvy = -Math.abs(mvy); }
+      } else {
+        px = Math.min(bx1, Math.max(bx0, px));
+        py = Math.min(by1, Math.max(by0, py));
+      }
+    } else if (mode === 'sin') {
+      phase += 2 * Math.PI * freq * DT;
+      ampEff += (amp - ampEff) * Math.min(1, DT * 4);
+      const aMax = VMAX * 0.98 / (2 * Math.PI * Math.max(freq, 0.01));
+      const a = Math.min(ampEff, aMax);
+      px = cx; py = cy - a * Math.sin(phase);
+    } else if (mode === 'linear') {
+      px += linDir * speedFrac * C * DT;
+      const hi = cx + amp, lo = cx - amp;
+      if (px > hi) { px = 2 * hi - px; linDir = -1; }
+      else if (px < lo) { px = 2 * lo - px; linDir = 1; }
+      py = cy;
+    } else if (mode === 'circular') {
+      const R = 100;
+      theta += speedFrac * C / R * DT;
+      px = cx + R * Math.cos(theta); py = cy + R * Math.sin(theta);
+    } else if (mode === 'bump') {
+      if (mt >= 0.5 && mt < 0.5 + duration) px += speedFrac * C * DT;
+      px = Math.min(bx1, px);
+    }
+    let vx = (px - ox) / DT, vy = (py - oy) / DT;
+    const sp = Math.hypot(vx, vy);
+    if (sp > VMAX) { vx *= VMAX / sp; vy *= VMAX / sp; }
+    stepN++; simT += DT;
+    pushSample(simT, px, py, vx, vy, stepN);
+  }
+
+  // ---- 繪圖 ----
+  const maxPts = CAP;
+  const pts = new Float32Array(maxPts * 2);
+
+  function arrowHead(x, y, dx, dy, size, color) {
+    const l = Math.hypot(dx, dy); if (l < 1e-6) return;
+    dx /= l; dy /= l;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x + dx * size, y + dy * size);
+    ctx.lineTo(x - dx * size * 0.6 - dy * size * 0.6, y - dy * size * 0.6 + dx * size * 0.6);
+    ctx.lineTo(x - dx * size * 0.6 + dy * size * 0.6, y - dy * size * 0.6 - dx * size * 0.6);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    const t = simT;
+    const maxR = Math.hypot(W, H) + 100;
+    const qx = hX[head], qy = hY[head];
+
+    ctx.lineWidth = 1.3; ctx.strokeStyle = '#f2f2c8';
+    for (let k = 0; k < N_RAYS; k++) {
+      const a = 2 * Math.PI * k / N_RAYS;
+      const ux = Math.cos(a), uy = Math.sin(a);
+      let m = 0;
+      for (let i = 0; i < count; i++) {
+        const idx = (head - i + CAP) % CAP;
+        const tau = t - hT[idx];
+        const r = C * tau;
+        if (r > maxR) break;
+        const vx = hVX[idx], vy = hVY[idx];
+        const vu = vx * ux + vy * uy;
+        const s = -vu + Math.sqrt(vu * vu + C * C - (vx * vx + vy * vy));
+        const nx = (vx + s * ux) / C, ny = (vy + s * uy) / C;
+        pts[2 * m] = hX[idx] + r * nx;
+        pts[2 * m + 1] = hY[idx] + r * ny;
+        m++;
+      }
+      if (m < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(pts[0], pts[1]);
+      for (let i = 1; i < m; i++) ctx.lineTo(pts[2 * i], pts[2 * i + 1]);
+      ctx.stroke();
+      // 箭頭 (負電荷：指向電荷)
+      for (let i = 0; i < m; i++) {
+        const idx = (head - i + CAP) % CAP;
+        if ((((hN[idx] % ARROW_EVERY) + ARROW_EVERY) % ARROW_EVERY) !== 0) continue;
+        const x = pts[2 * i], y = pts[2 * i + 1];
+        if (Math.hypot(x - qx, y - qy) < 28) continue;
+        if (x < -20 || x > W + 20 || y < -20 || y > H + 20) continue;
+        const a0 = Math.max(i - 3, 0), a1 = Math.min(i + 3, m - 1);
+        arrowHead(x, y, pts[2 * a0] - pts[2 * a1], pts[2 * a0 + 1] - pts[2 * a1 + 1], 7, '#ffffe0');
+      }
+    }
+
+    // 速度向量與光速參考
+    if (showV) {
+      const L = 0.5; // 箭頭長度 = 速率 × 0.5 秒
+      const vx = hVX[head], vy = hVY[head];
+      if (Math.hypot(vx, vy) > 2) {
+        const ex = qx + vx * L, ey = qy + vy * L;
+        ctx.strokeStyle = '#3fe05a'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(ex, ey); ctx.stroke();
+        arrowHead(ex, ey, vx, vy, 11, '#3fe05a');
+      }
+      const bx = 30, by = H - 40, len = C * L;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + len, by); ctx.stroke();
+      arrowHead(bx + len, by, 1, 0, 11, '#fff');
+      ctx.fillStyle = '#fff'; ctx.font = '16px "Microsoft JhengHei","PingFang TC",sans-serif';
+      ctx.fillText('光速', bx, by - 12);
+    }
+
+    // 電荷
+    const g = ctx.createRadialGradient(qx - 4, qy - 4, 2, qx, qy, 14);
+    g.addColorStop(0, '#9bb8ff'); g.addColorStop(1, '#1f3fd0');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(qx, qy, 13, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.fillRect(qx - 6, qy - 1.5, 12, 3);
+  }
+
+  // ---- 主迴圈 ----
+  let last = performance.now(), acc = 0;
+  function frame(now) {
+    let dt = (now - last) / 1000; last = now;
+    if (dt > 0.1) dt = 0.1;
+    if (!paused) { acc += dt; while (acc >= DT) { step(); acc -= DT; } }
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---- 滑鼠 / 觸控 ----
+  const isManual = () => mode === 'friction' || mode === 'nofriction';
+  function pos(e) { const r = cvs.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+  cvs.addEventListener('pointerdown', e => {
+    if (!isManual()) return;
+    const [x, y] = pos(e);
+    if (Math.hypot(x - px, y - py) < 50) {
+      dragging = true; offX = px - x; offY = py - y; tx = px; ty = py;
+      cvs.setPointerCapture(e.pointerId);
+    }
+  });
+  cvs.addEventListener('pointermove', e => {
+    const [x, y] = pos(e);
+    if (dragging) {
+      tx = Math.min(bx1, Math.max(bx0, x + offX));
+      ty = Math.min(by1, Math.max(by0, y + offY));
+    } else {
+      cvs.style.cursor = (isManual() && Math.hypot(x - px, y - py) < 50) ? 'grab' : 'default';
+    }
+  });
+  const endDrag = () => { dragging = false; };
+  cvs.addEventListener('pointerup', endDrag);
+  cvs.addEventListener('pointercancel', endDrag);
+
+  // ---- 控制面板 ----
+  const $ = id => document.getElementById(id);
+  function updateUI() {
+    $('vAmp').textContent = amp;
+    $('vFreq').textContent = freq.toFixed(2) + ' Hz';
+    $('vSpeed').textContent = speedFrac.toFixed(2) + ' c';
+    $('vDur').textContent = duration.toFixed(2) + ' s';
+    $('slAmp').classList.toggle('hide', !(mode === 'sin' || mode === 'linear'));
+    $('slFreq').classList.toggle('hide', mode !== 'sin');
+    $('slSpeed').classList.toggle('hide', !(mode === 'linear' || mode === 'circular' || mode === 'bump'));
+    $('slDur').classList.toggle('hide', mode !== 'bump');
+    $('stop').classList.toggle('hide', !isManual());
+  }
+  document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
+    mode = r.value; updateUI(); restart();
+  }));
+  $('amp').oninput = e => { amp = +e.target.value; updateUI(); };
+  $('freq').oninput = e => { freq = +e.target.value; updateUI(); };
+  $('speed').oninput = e => { speedFrac = +e.target.value; updateUI(); };
+  $('dur').oninput = e => { duration = +e.target.value; updateUI(); };
+  $('showV').onchange = e => { showV = e.target.checked; };
+  $('pause').onchange = e => { paused = e.target.checked; };
+  $('stop').onclick = () => { mvx = mvy = 0; };
+  $('restart').onclick = () => restart();
+  $('reset').onclick = () => {
+    mode = 'friction'; amp = 60; freq = 0.6; speedFrac = 0.5; duration = 0.6; showV = false; paused = false;
+    document.querySelector('input[name=mode][value=friction]').checked = true;
+    $('amp').value = amp; $('freq').value = freq; $('speed').value = speedFrac; $('dur').value = duration;
+    $('showV').checked = false; $('pause').checked = false;
+    updateUI(); restart();
+  };
+
+  window.addEventListener('resize', resize);
+  updateUI();
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
