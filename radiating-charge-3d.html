@@ -68,7 +68,7 @@
     <input id="nB" type="range" min="1" max="40" step="1" value="12"></div>
   <label class="r" style="margin-top:6px"><input type="checkbox" id="showW" checked>顯示電磁波傳播（E／B 向量）</label>
   <div id="slW">
-    <div class="sl"><select id="wplane"><option value="4" selected>取樣平面：XZ（水平）</option><option value="1">取樣平面：XY</option><option value="2">取樣平面：YZ</option><option value="3">三個平面</option><option value="4">只取 X 軸</option><option value="5">只取 Y 軸</option><option value="6">只取 Z 軸</option></select></div>
+    <div class="sl"><select id="wplane"><option value="1" selected>取樣平面：XZ（水平）</option><option value="1">取樣平面：XY</option><option value="2">取樣平面：YZ</option><option value="3">三個平面</option><option value="4">只取 X 軸</option><option value="5">只取 Y 軸</option><option value="6">只取 Z 軸</option></select></div>
     <label class="r"><input type="checkbox" id="radOnly" checked>僅顯示輻射場（加速度項）</label>
     <label class="r"><input type="checkbox" id="wEnv" checked>顯示包絡線</label>
     <div class="sl"><div class="top"><span>向量取樣數</span><span id="vN"></span></div>
@@ -110,8 +110,8 @@
   // ---- 狀態 ----
   let mode = 'sin', axis = 1;
   let amp = 60, freq = 0.6, speedFrac = 0.5, duration = 0.6;
-  let nE = 2, nB = 5, sign = 1;
-  let showB = false, showV = true, paused = false, autoRot = false;
+  let nE = 1, nB = 1, sign = 1;
+  let showB = true, showV = true, paused = false, autoRot = false;
   let yaw = 0.6, pitch = 0.35, zoom = 1;
   let px = 0, py = 0, pz = 0, mvx = 0, mvy = 0, mvz = 0;
   let mt = 0, phase = 0, ampEff = 60, lp = 0, linDir = 1, theta = 0;
@@ -236,7 +236,7 @@
   let Bdx = 0, Bdy = 0, Bdz = 0, Bmag = 0, lastR = 1;
   // 最近一次 bDir 的場：總電場 FE、加速度（輻射）項 FA、由電荷指向場點的單位向量 FN
   let FEx = 0, FEy = 0, FEz = 0, FAx = 0, FAy = 0, FAz = 0, FNx = 0, FNy = 0, FNz = 0;
-  let showW = true, radOnly = true, wplane = 0, wGain = 1, wEnv = true;
+  let showW = true, radOnly = true, wplane = 5, wGain = 1, wEnv = true;
   let WG = 13; const WEXT = 450, WLEN = 45;
 
   function gAt(i, x, y, z) {
