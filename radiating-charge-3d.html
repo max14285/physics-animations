@@ -81,7 +81,7 @@
   <div class="sl" style="margin-top:0"><div class="top"><span>縮放</span><span id="vZoom"></span></div>
     <input id="zoom" type="range" min="0.3" max="2.5" step="0.01" value="1"></div>
   <label class="r"><input type="checkbox" id="autoRot">自動旋轉視角</label>
-  <label class="r"><input type="checkbox" id="showV">顯示速度</label>
+  <label class="r"><input type="checkbox" id="showV"checked>顯示速度</label>
   <label class="r"><input type="checkbox" id="pause">暫停</label>
   <div class="btns">
     <button id="restart">重新開始</button>
@@ -236,7 +236,7 @@
   let Bdx = 0, Bdy = 0, Bdz = 0, Bmag = 0, lastR = 1;
   // 最近一次 bDir 的場：總電場 FE、加速度（輻射）項 FA、由電荷指向場點的單位向量 FN
   let FEx = 0, FEy = 0, FEz = 0, FAx = 0, FAy = 0, FAz = 0, FNx = 0, FNy = 0, FNz = 0;
-  let showW = true, radOnly = true, wplane = 5, wGain = 1, wEnv = true;
+  let showW = true, radOnly = true, wplane = 4, wGain = 1, wEnv = true;
   let WG = 13; const WEXT = 450, WLEN = 45;
 
   function gAt(i, x, y, z) {
@@ -672,7 +672,7 @@
   $('viewReset').onclick = () => { yaw = 0.6; pitch = 0.35; autoZoom(); };
   $('reset').onclick = () => {
     mode = 'friction'; axis = 1; amp = 60; freq = 0.6; speedFrac = 0.5; duration = 0.6;
-    nE = 24; nB = 12; sign = -1; showB = true; showV = false; paused = false; autoRot = false;
+    nE = 1; nB = 1; sign = -1; showB = true; showV = false; paused = false; autoRot = false;
     showW = true; radOnly = true; wplane = 4; wGain = 1; wEnv = true; WG = 13;
     $('showW').checked = true; $('radOnly').checked = true; $('wEnv').checked = true; $('wn').value = 13; $('wplane').value = 4; $('gain').value = 1;
     dE = fib(nE); dB = fib(nB);
