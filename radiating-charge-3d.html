@@ -35,9 +35,9 @@
 <div id="title">電荷輻射 3D</div>
 <div id="hint">拖曳電荷：移動（手動模式）<br>拖曳空白處：旋轉視角<br>滾輪 / 縮放滑桿：放大縮小</div>
 <div id="panel">
-  <label class="r"><input type="radio" name="mode" value="friction" checked>手動操作</label>
+  <label class="r"><input type="radio" name="mode" value="friction" >手動操作</label>
   <label class="r"><input type="radio" name="mode" value="nofriction">手動操作（無摩擦力）</label>
-  <label class="r"><input type="radio" name="mode" value="sin">正弦曲線</label>
+  <label class="r"><input type="radio" name="mode" value="sin" checked>正弦曲線</label>
   <label class="r"><input type="radio" name="mode" value="linear">線性</label>
   <label class="r"><input type="radio" name="mode" value="circular">圓形</label>
   <label class="r"><input type="radio" name="mode" value="bump">碰撞</label>
@@ -58,8 +58,8 @@
   </div>
   <hr>
   <div class="row">
-    <label class="r"><input type="radio" name="sign" value="1">正電荷</label>
-    <label class="r"><input type="radio" name="sign" value="-1" checked>負電荷</label>
+    <label class="r"><input type="radio" name="sign" value="1" checked>正電荷</label>
+    <label class="r"><input type="radio" name="sign" value="-1">負電荷</label>
   </div>
   <div class="sl"><div class="top"><span>電量（電場線數）</span><span id="vE"></span></div>
     <input id="nE" type="range" min="1" max="150" step="1" value="24"></div>
@@ -68,7 +68,7 @@
     <input id="nB" type="range" min="1" max="40" step="1" value="12"></div>
   <label class="r" style="margin-top:6px"><input type="checkbox" id="showW" checked>顯示電磁波傳播（E／B 向量）</label>
   <div id="slW">
-    <div class="sl"><select id="wplane"><option value="0" selected>取樣平面：XZ（水平）</option><option value="1">取樣平面：XY</option><option value="2">取樣平面：YZ</option><option value="3">三個平面</option><option value="4">只取 X 軸</option><option value="5">只取 Y 軸</option><option value="6">只取 Z 軸</option></select></div>
+    <div class="sl"><select id="wplane"><option value="0" >取樣平面：XZ（水平）</option><option value="1">取樣平面：XY</option><option value="2">取樣平面：YZ</option><option value="3">三個平面</option><option value="4"selected>只取 X 軸</option><option value="5">只取 Y 軸</option><option value="6">只取 Z 軸</option></select></div>
     <label class="r"><input type="checkbox" id="radOnly" checked>僅顯示輻射場（加速度項）</label>
     <label class="r"><input type="checkbox" id="wEnv" checked>顯示包絡線</label>
     <div class="sl"><div class="top"><span>向量取樣數</span><span id="vN"></span></div>
@@ -673,8 +673,8 @@
   $('reset').onclick = () => {
     mode = 'friction'; axis = 1; amp = 60; freq = 0.6; speedFrac = 0.5; duration = 0.6;
     nE = 24; nB = 12; sign = -1; showB = true; showV = false; paused = false; autoRot = false;
-    showW = true; radOnly = true; wplane = 5; wGain = 1; wEnv = true; WG = 13;
-    $('showW').checked = true; $('radOnly').checked = true; $('wEnv').checked = true; $('wn').value = 13; $('wplane').value = 0; $('gain').value = 1;
+    showW = true; radOnly = true; wplane = 4; wGain = 1; wEnv = true; WG = 13;
+    $('showW').checked = true; $('radOnly').checked = true; $('wEnv').checked = true; $('wn').value = 13; $('wplane').value = 4; $('gain').value = 1;
     dE = fib(nE); dB = fib(nB);
     document.querySelector('input[name=mode][value=friction]').checked = true;
     document.querySelector('input[name=sign][value="-1"]').checked = true;
