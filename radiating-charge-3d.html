@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>電荷輻射 3D</title>
+<style>
+  html, body { margin:0; height:100%; background:#000; overflow:hidden; color:#fff;
+    font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif; user-select:none; }
+  canvas { position:absolute; left:0; top:0; touch-action:none; }
+  #panel { position:absolute; right:10px; top:10px; width:196px; max-height:calc(100% - 20px); overflow:auto;
+    box-sizing:border-box; background:rgba(28,38,72,.92); border:1px solid #6f84bd; border-radius:8px;
+    padding:10px 12px; font-size:14px; }
+  #panel label.r { display:block; padding:3px 0; cursor:pointer; }
+  #panel input[type=radio], #panel input[type=checkbox] { margin-right:6px; }
+  .sl { margin-top:8px; }
+  .sl .top { display:flex; justify-content:space-between; font-size:13px; }
+  .sl input { width:100%; margin:2px 0 0; }
+  .row { display:flex; gap:10px; }
+  select { width:100%; background:#22305f; color:#fff; border:1px solid #6f84bd; border-radius:4px; padding:3px; font-family:inherit; }
+  hr { border:0; border-top:1px solid #50639a; margin:10px 0; }
+  button { background:#3b5bb5; color:#fff; border:1px solid #8aa0e0; border-radius:5px; padding:5px 8px;
+    font-size:14px; cursor:pointer; font-family:inherit; }
+  button:hover { background:#4d70d8; }
+  .btns { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+  #title { position:absolute; left:14px; top:10px; font-size:20px; opacity:.85; pointer-events:none; }
+  #hint { position:absolute; left:14px; top:40px; font-size:12px; opacity:.55; pointer-events:none; line-height:1.6; }
+  .hide { display:none !important; }
+  .leg { font-size:12px; margin-top:6px; line-height:1.6; }
+  .leg i { display:inline-block; width:18px; height:3px; vertical-align:middle; margin-right:5px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title">電荷輻射 3D</div>
+<div id="hint">拖曳電荷：移動（手動模式）<br>拖曳空白處：旋轉視角<br>滾輪 / 縮放滑桿：放大縮小</div>
+<div id="panel">
+  <label class="r"><input type="radio" name="mode" value="friction" checked>手動操作</label>
+  <label class="r"><input type="radio" name="mode" value="nofriction">手動操作（無摩擦力）</label>
+  <label class="r"><input type="radio" name="mode" value="sin">正弦曲線</label>
+  <label class="r"><input type="radio" name="mode" value="linear">線性</label>
+  <label class="r"><input type="radio" name="mode" value="circular">圓形</label>
+  <label class="r"><input type="radio" name="mode" value="bump">碰撞</label>
+
+  <div id="slAxis" class="sl hide"><div class="top"><span id="axisLabel">運動軸向</span></div>
+    <select id="axis"><option value="0">X 軸</option><option value="1" selected>Y 軸（垂直）</option><option value="2">Z 軸</option></select></div>
+  <div id="slAmp" class="sl hide"><div class="top"><span>強度</span><span id="vAmp"></span></div>
+    <input id="amp" type="range" min="0" max="150" step="1" value="60"></div>
+  <div id="slFreq" class="sl hide"><div class="top"><span>頻率</span><span id="vFreq"></span></div>
+    <input id="freq" type="range" min="0.1" max="2" step="0.05" value="0.6"></div>
+  <div id="slSpeed" class="sl hide"><div class="top"><span>速度</span><span id="vSpeed"></span></div>
+    <input id="speed" type="range" min="0" max="0.9" step="0.01" value="0.5"></div>
+  <div id="slDur" class="sl hide"><div class="top"><span>持續時間</span><span id="vDur"></span></div>
+    <input id="dur" type="range" min="0.1" max="1.5" step="0.05" value="0.6"></div>
+
+  <div class="btns">
+    <button id="stop">靜止電荷</button>
+  </div>
+  <hr>
+  <div class="row">
+    <label class="r"><input type="radio" name="sign" value="1">正電荷</label>
+    <label class="r"><input type="radio" name="sign" value="-1" checked>負電荷</label>
+  </div>
+  <div class="sl"><div class="top"><span>電量（電場線數）</span><span id="vE"></span></div>
+    <input id="nE" type="range" min="1" max="150" step="1" value="24"></div>
+  <label class="r" style="margin-top:6px"><input type="checkbox" id="showB" checked>顯示磁場</label>
+  <div id="slB" class="sl"><div class="top"><span>磁力線數量</span><span id="vB"></span></div>
+    <input id="nB" type="range" min="1" max="40" step="1" value="12"></div>
+  <label class="r" style="margin-top:6px"><input type="checkbox" id="showW" checked>顯示電磁波傳播（E／B 向量）</label>
+  <div id="slW">
+    <div class="sl"><select id="wplane"><option value="0" selected>取樣平面：XZ（水平）</option><option value="1">取樣平面：XY</option><option value="2">取樣平面：YZ</option><option value="3">三個平面</option><option value="4">只取 X 軸</option><option value="5">只取 Y 軸</option><option value="6">只取 Z 軸</option></select></div>
+    <label class="r"><input type="checkbox" id="radOnly" checked>僅顯示輻射場（加速度項）</label>
+    <label class="r"><input type="checkbox" id="wEnv" checked>顯示包絡線</label>
+    <div class="sl"><div class="top"><span>向量取樣數</span><span id="vN"></span></div>
+      <input id="wn" type="range" min="5" max="40" step="1" value="13"></div>
+    <div class="sl"><div class="top"><span>向量增益</span><span id="vG"></span></div>
+      <input id="gain" type="range" min="0.2" max="8" step="0.1" value="1"></div>
+  </div>
+  <div class="leg"><i style="background:#f2f2c8"></i>電場線<br><i style="background:#58b8ff"></i>磁力線<br><i style="background:#ffe14a"></i>E 向量　<i style="background:#4cc9ff"></i>B 向量</div>
+  <hr>
+  <div class="sl" style="margin-top:0"><div class="top"><span>縮放</span><span id="vZoom"></span></div>
+    <input id="zoom" type="range" min="0.3" max="2.5" step="0.01" value="1"></div>
+  <label class="r"><input type="checkbox" id="autoRot">自動旋轉視角</label>
+  <label class="r"><input type="checkbox" id="showV">顯示速度</label>
+  <label class="r"><input type="checkbox" id="pause">暫停</label>
+  <div class="btns">
+    <button id="restart">重新開始</button>
+    <button id="viewReset">重置視角</button>
+    <button id="reset">重置</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const C = 300, C2 = C * C;   // 光速 (px/s)
+  const DT = 0.01;             // 固定時間步長 (s)
+  const CAP = 900;             // 歷史取樣數 (9 秒)
+  const VMAX = 0.95 * C;
+  const PANEL_W = 214;
+  const BOX = 300;             // 立方體活動範圍 (±BOX)
+  const MAXR = 1200;           // 電場線最大長度
+  const ARROW_EVERY = 60;      // 每幾個取樣放一個箭頭
+  const CAMD = 2000;           // 相機距離
+  const B_STEP = 7, B_MAXSTEPS = 220, B_LIM = 1400;
+
+  const $ = id => document.getElementById(id);
+  const cvs = $('c'), ctx = cvs.getContext('2d');
+  let W, H, dpr, cx, cy;
+
+  // ---- 狀態 ----
+  let mode = 'friction', axis = 1;
+  let amp = 60, freq = 0.6, speedFrac = 0.5, duration = 0.6;
+  let nE = 24, nB = 12, sign = -1;
+  let showB = true, showV = false, paused = false, autoRot = false;
+  let yaw = 0.6, pitch = 0.35, zoom = 1;
+  let px = 0, py = 0, pz = 0, mvx = 0, mvy = 0, mvz = 0;
+  let mt = 0, phase = 0, ampEff = 60, lp = 0, linDir = 1, theta = 0;
+  let dragging = false, tx = 0, ty = 0, tz = 0, offX = 0, offY = 0, dragZ = 0;
+  let orbit = false, lastX = 0, lastY = 0;
+
+  const AXV = [[1,0,0],[0,1,0],[0,0,1]];
+  const PLANE = [[[0,1,0],[0,0,1]], [[0,0,1],[1,0,0]], [[1,0,0],[0,1,0]]];
+
+  // 歷史 (環狀緩衝)
+  const hT = new Float64Array(CAP), hX = new Float64Array(CAP), hY = new Float64Array(CAP), hZ = new Float64Array(CAP);
+  const hVX = new Float64Array(CAP), hVY = new Float64Array(CAP), hVZ = new Float64Array(CAP), hN = new Int32Array(CAP);
+  let head = -1, count = 0, stepN = 0, simT = 0;
+
+  function pushSample(t, x, y, z, vx, vy, vz, n) {
+    head = (head + 1) % CAP;
+    hT[head] = t; hX[head] = x; hY[head] = y; hZ[head] = z;
+    hVX[head] = vx; hVY[head] = vy; hVZ[head] = vz; hN[head] = n;
+    if (count < CAP) count++;
+  }
+
+  // ---- 球面均勻分佈 (Fibonacci) ----
+  function fib(N) {
+    const a = new Float64Array(3 * N);
+    const ga = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < N; i++) {
+      const y = 1 - 2 * (i + 0.5) / N, r = Math.sqrt(Math.max(0, 1 - y * y)), p = i * ga;
+      a[3 * i] = Math.cos(p) * r; a[3 * i + 1] = y; a[3 * i + 2] = Math.sin(p) * r;
+    }
+    return a;
+  }
+  let dE = fib(nE), dB = fib(nB);
+
+  // ---- 視角 / 投影 ----
+  let m00, m02, m10, m11, m12, m20, m21, m22, SX = 0, SY = 0, SW = 1;
+  function updateMatrix() {
+    const cY = Math.cos(yaw), sY = Math.sin(yaw), cP = Math.cos(pitch), sP = Math.sin(pitch);
+    m00 = cY; m02 = sY; m10 = sY * sP; m11 = cP; m12 = -cY * sP; m20 = -sY * cP; m21 = sP; m22 = cY * cP;
+  }
+  function project(x, y, z) {
+    const X = m00 * x + m02 * z, Y = m10 * x + m11 * y + m12 * z, Z = m20 * x + m21 * y + m22 * z;
+    const d = CAMD - Z; if (d < 60) return false;
+    const w = zoom * CAMD / d; SX = cx + X * w; SY = cy - Y * w; SW = w; return true;
+  }
+  function autoZoom() {
+    zoom = Math.max(0.35, Math.min(1.4, Math.min(W - PANEL_W, H) / 1000));
+    $('zoom').value = zoom; updateUI();
+  }
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    W = window.innerWidth; H = window.innerHeight;
+    cvs.width = W * dpr; cvs.height = H * dpr;
+    cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+    cx = Math.max(150, (W - PANEL_W) / 2); cy = H / 2;
+  }
+
+  function restart() {
+    mt = 0; phase = 0; ampEff = amp; linDir = 1; theta = 0; lp = 0;
+    mvx = mvy = mvz = 0; dragging = false;
+    px = py = pz = 0;
+    const a = AXV[axis];
+    if (mode === 'circular') { const e1 = PLANE[axis][0]; px = 100 * e1[0]; py = 100 * e1[1]; pz = 100 * e1[2]; }
+    if (mode === 'bump') { lp = -120; px = lp * a[0]; py = lp * a[1]; pz = lp * a[2]; }
+    head = -1; count = 0; simT = 0; stepN = -(CAP - 1);
+    for (let i = 0; i < CAP; i++) pushSample(-(CAP - 1 - i) * DT, px, py, pz, 0, 0, 0, stepN++);
+    stepN--;
+  }
+
+  const clampBox = v => Math.min(BOX, Math.max(-BOX, v));
+
+  function step() {
+    const ox = px, oy = py, oz = pz;
+    const a = AXV[axis];
+    mt += DT;
+    if (mode === 'friction' || mode === 'nofriction') {
+      if (dragging) {
+        let nvx = (tx - px) * 12, nvy = (ty - py) * 12, nvz = (tz - pz) * 12;
+        const sp = Math.hypot(nvx, nvy, nvz);
+        if (sp > VMAX) { const k = VMAX / sp; nvx *= k; nvy *= k; nvz *= k; }
+        mvx = nvx; mvy = nvy; mvz = nvz;
+      } else if (mode === 'friction') {
+        const f = Math.exp(-3 * DT);
+        mvx *= f; mvy *= f; mvz *= f;
+        if (Math.hypot(mvx, mvy, mvz) < 0.5) mvx = mvy = mvz = 0;
+      }
+      px += mvx * DT; py += mvy * DT; pz += mvz * DT;
+      if (mode === 'nofriction' && !dragging) {
+        if (px < -BOX) { px = -BOX; mvx = Math.abs(mvx); } if (px > BOX) { px = BOX; mvx = -Math.abs(mvx); }
+        if (py < -BOX) { py = -BOX; mvy = Math.abs(mvy); } if (py > BOX) { py = BOX; mvy = -Math.abs(mvy); }
+        if (pz < -BOX) { pz = -BOX; mvz = Math.abs(mvz); } if (pz > BOX) { pz = BOX; mvz = -Math.abs(mvz); }
+      } else { px = clampBox(px); py = clampBox(py); pz = clampBox(pz); }
+    } else if (mode === 'sin') {
+      phase += 2 * Math.PI * freq * DT;
+      ampEff += (amp - ampEff) * Math.min(1, DT * 4);
+      const aMax = VMAX * 0.98 / (2 * Math.PI * Math.max(freq, 0.01));
+      const s = Math.min(ampEff, aMax) * Math.sin(phase);
+      px = a[0] * s; py = a[1] * s; pz = a[2] * s;
+    } else if (mode === 'linear') {
+      lp += linDir * speedFrac * C * DT;
+      if (lp > amp) { lp = 2 * amp - lp; linDir = -1; }
+      else if (lp < -amp) { lp = -2 * amp - lp; linDir = 1; }
+      px = a[0] * lp; py = a[1] * lp; pz = a[2] * lp;
+    } else if (mode === 'circular') {
+      const R = 100, [e1, e2] = PLANE[axis];
+      theta += speedFrac * C / R * DT;
+      const c = R * Math.cos(theta), s = R * Math.sin(theta);
+      px = c * e1[0] + s * e2[0]; py = c * e1[1] + s * e2[1]; pz = c * e1[2] + s * e2[2];
+    } else if (mode === 'bump') {
+      if (mt >= 0.5 && mt < 0.5 + duration) lp += speedFrac * C * DT;
+      lp = Math.min(BOX, lp);
+      px = a[0] * lp; py = a[1] * lp; pz = a[2] * lp;
+    }
+    let vx = (px - ox) / DT, vy = (py - oy) / DT, vz = (pz - oz) / DT;
+    const sp = Math.hypot(vx, vy, vz);
+    if (sp > VMAX) { const k = VMAX / sp; vx *= k; vy *= k; vz *= k; }
+    stepN++; simT += DT;
+    pushSample(simT, px, py, pz, vx, vy, vz, stepN);
+  }
+
+  // ---- 磁場：Liénard–Wiechert 場 ----
+  let Bdx = 0, Bdy = 0, Bdz = 0, Bmag = 0, lastR = 1;
+  // 最近一次 bDir 的場：總電場 FE、加速度（輻射）項 FA、由電荷指向場點的單位向量 FN
+  let FEx = 0, FEy = 0, FEz = 0, FAx = 0, FAy = 0, FAz = 0, FNx = 0, FNy = 0, FNz = 0;
+  let showW = true, radOnly = true, wplane = 0, wGain = 1, wEnv = true;
+  let WG = 13; const WEXT = 450, WLEN = 45;
+
+  function gAt(i, x, y, z) {
+    const idx = (head - i + CAP) % CAP;
+    const dx = x - hX[idx], dy = y - hY[idx], dz = z - hZ[idx];
+    return C * (simT - hT[idx]) - Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  // 計算場點 (x,y,z) 的磁場方向，存入 Bdx.. ; 場太弱時回傳 false
+  function bDir(x, y, z) {
+    const n = count;
+    let hi = n - 1, lo = 0;
+    let rx, ry, rz, vx, vy, vz, ax = 0, ay = 0, az = 0;
+    if (gAt(hi, x, y, z) < 0) {
+      const id = (head - hi + CAP) % CAP;
+      rx = hX[id]; ry = hY[id]; rz = hZ[id]; vx = hVX[id]; vy = hVY[id]; vz = hVZ[id];
+    } else {
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (gAt(mid, x, y, z) >= 0) hi = mid; else lo = mid;
+      }
+      const g0 = gAt(lo, x, y, z), g1 = gAt(hi, x, y, z);
+      let al = g1 === g0 ? 1 : -g0 / (g1 - g0); al = Math.min(1, Math.max(0, al));
+      const i0 = (head - lo + CAP) % CAP, i1 = (head - hi + CAP) % CAP;
+      rx = hX[i0] + (hX[i1] - hX[i0]) * al; ry = hY[i0] + (hY[i1] - hY[i0]) * al; rz = hZ[i0] + (hZ[i1] - hZ[i0]) * al;
+      vx = hVX[i0] + (hVX[i1] - hVX[i0]) * al; vy = hVY[i0] + (hVY[i1] - hVY[i0]) * al; vz = hVZ[i0] + (hVZ[i1] - hVZ[i0]) * al;
+      // 加速度 (以 ±4 取樣平滑，避免瞬間跳變漏掉)
+      const iA = Math.max(0, hi - 4), iB = Math.min(n - 1, hi + 4);
+      const dA = (head - iA + CAP) % CAP, dB = (head - iB + CAP) % CAP;
+      const k = 1 / ((iB - iA) * DT);
+      ax = (hVX[dA] - hVX[dB]) * k; ay = (hVY[dA] - hVY[dB]) * k; az = (hVZ[dA] - hVZ[dB]) * k;
+    }
+    const dx = x - rx, dy = y - ry, dz = z - rz;
+    const R0 = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (R0 < 1e-6) return false;
+    const nx = dx / R0, ny = dy / R0, nz = dz / R0;
+    const R = Math.max(R0, 6);
+    const bx = vx / C, by = vy / C, bz = vz / C;
+    const kap = 1 - (nx * bx + ny * by + nz * bz), k3 = kap * kap * kap;
+    const f1 = (1 - (bx * bx + by * by + bz * bz)) / (k3 * R * R);
+    const wx = nx - bx, wy = ny - by, wz = nz - bz;
+    const c1x = wy * az - wz * ay, c1y = wz * ax - wx * az, c1z = wx * ay - wy * ax;
+    const c2x = ny * c1z - nz * c1y, c2y = nz * c1x - nx * c1z, c2z = nx * c1y - ny * c1x;
+    const f2 = 1 / (C2 * k3 * R);
+    const Ex = sign * (wx * f1 + c2x * f2), Ey = sign * (wy * f1 + c2y * f2), Ez = sign * (wz * f1 + c2z * f2);
+    const Bx = ny * Ez - nz * Ey, By = nz * Ex - nx * Ez, Bz = nx * Ey - ny * Ex;
+    const mag = Math.sqrt(Bx * Bx + By * By + Bz * Bz);
+    if (!(mag > 1e-13)) return false;
+    FEx = Ex; FEy = Ey; FEz = Ez;
+    FAx = sign * c2x * f2; FAy = sign * c2y * f2; FAz = sign * c2z * f2;
+    FNx = nx; FNy = ny; FNz = nz;
+    Bdx = Bx / mag; Bdy = By / mag; Bdz = Bz / mag; Bmag = mag; lastR = R;
+    return true;
+  }
+
+  const bufF = new Float32Array(3 * (B_MAXSTEPS + 2)), bufB = new Float32Array(3 * (B_MAXSTEPS + 2));
+  let closedFlag = false, Qx = 0, Qy = 0, Qz = 0;
+
+  function traceB(x0, y0, z0, sg, arr) {
+    let x = x0, y = y0, z = z0, n = 0; closedFlag = false;
+    const h = B_STEP;
+    for (let s = 0; s < B_MAXSTEPS; s++) {
+      if (!bDir(x, y, z)) break;
+      const mx = x + sg * Bdx * h * 0.5, my = y + sg * Bdy * h * 0.5, mz = z + sg * Bdz * h * 0.5;
+      if (!bDir(mx, my, mz)) break;
+      x += sg * Bdx * h; y += sg * Bdy * h; z += sg * Bdz * h;
+      const qx = x - Qx, qy = y - Qy, qz = z - Qz;
+      if (qx * qx + qy * qy + qz * qz > B_LIM * B_LIM) break;
+      arr[3 * n] = x; arr[3 * n + 1] = y; arr[3 * n + 2] = z; n++;
+      if (sg > 0 && s > 8) {
+        const ex = x - x0, ey = y - y0, ez = z - z0;
+        if (ex * ex + ey * ey + ez * ez < (0.8 * h) * (0.8 * h)) { closedFlag = true; break; }
+      }
+    }
+    return n;
+  }
+
+  // ---- 繪圖 ----
+  const sxs = new Float32Array(CAP), sys = new Float32Array(CAP), okv = new Uint8Array(CAP);
+
+  function arrowHead(x, y, dx, dy, size, color) {
+    const l = Math.hypot(dx, dy); if (l < 1e-6) return;
+    dx /= l; dy /= l;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x + dx * size, y + dy * size);
+    ctx.lineTo(x - dx * size * 0.6 - dy * size * 0.6, y - dy * size * 0.6 + dx * size * 0.6);
+    ctx.lineTo(x - dx * size * 0.6 + dy * size * 0.6, y - dy * size * 0.6 - dx * size * 0.6);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function strokePath(m) {
+    ctx.beginPath(); let pen = false;
+    for (let i = 0; i < m; i++) {
+      if (okv[i]) { if (pen) ctx.lineTo(sxs[i], sys[i]); else ctx.moveTo(sxs[i], sys[i]); pen = true; }
+      else pen = false;
+    }
+    ctx.stroke();
+  }
+
+  function drawBox() {
+    const c = [];
+    for (let i = 0; i < 8; i++) {
+      const x = (i & 1 ? 1 : -1) * BOX, y = (i & 2 ? 1 : -1) * BOX, z = (i & 4 ? 1 : -1) * BOX;
+      c.push(project(x, y, z) ? [SX, SY] : null);
+    }
+    ctx.strokeStyle = 'rgba(130,150,220,.25)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) for (const b of [1, 2, 4]) {
+      if (i & b) continue;
+      const p = c[i], q = c[i | b]; if (!p || !q) continue;
+      ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]);
+    }
+    ctx.stroke();
+  }
+
+  function drawB() {
+    const qx = Qx, qy = Qy, qz = Qz;
+    for (let k = 0; k < nB; k++) {
+      const dx = dB[3 * k], dy = dB[3 * k + 1], dz = dB[3 * k + 2];
+      const rr = 40 + 110 * ((k * 0.6180339887) % 1);
+      const x0 = qx + dx * rr, y0 = qy + dy * rr, z0 = qz + dz * rr;
+      if (!bDir(x0, y0, z0)) continue;
+      const alpha = Math.min(1, Bmag * lastR * lastR / 0.15);
+      if (alpha < 0.04) continue;
+      const nf = traceB(x0, y0, z0, 1, bufF); const closed = closedFlag;
+      if (closed && nf < 6) continue;
+      const nb = closed ? 0 : traceB(x0, y0, z0, -1, bufB);
+      let m = 0;
+      const add = (x, y, z) => { if (project(x, y, z)) { sxs[m] = SX; sys[m] = SY; okv[m] = 1; } else okv[m] = 0; m++; };
+      for (let j = nb - 1; j >= 0; j--) add(bufB[3 * j], bufB[3 * j + 1], bufB[3 * j + 2]);
+      add(x0, y0, z0);
+      for (let j = 0; j < nf; j++) add(bufF[3 * j], bufF[3 * j + 1], bufF[3 * j + 2]);
+      if (closed) add(x0, y0, z0);
+      if (m < 3) continue;
+      ctx.lineWidth = 1.3; ctx.strokeStyle = 'rgba(88,184,255,' + (0.85 * alpha).toFixed(3) + ')';
+      strokePath(m);
+      const col = 'rgba(150,215,255,' + alpha.toFixed(3) + ')';
+      for (let j = 8; j < m - 1; j += 16) {
+        if (!okv[j - 1] || !okv[j + 1] || !okv[j]) continue;
+        arrowHead(sxs[j], sys[j], sxs[j + 1] - sxs[j - 1], sys[j + 1] - sys[j - 1], 6, col);
+      }
+    }
+  }
+
+  // ---- 電磁波傳播：取樣平面上的 E (黃) 與 B (青) 向量 ----
+  function vecArrow(x, y, z, dx, dy, dz, len, col) {
+    if (!project(x, y, z)) return;
+    const bx = SX, by = SY;
+    if (!project(x + dx * len, y + dy * len, z + dz * len)) return;
+    ctx.strokeStyle = col; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(SX, SY); ctx.stroke();
+    arrowHead(SX, SY, SX - bx, SY - by, 4.5, col);
+  }
+  // 向量尖端（世界座標）；wOK 表示該點有有效場值
+  let wOK = false, wTEx = 0, wTEy = 0, wTEz = 0, wTBx = 0, wTBy = 0, wTBz = 0;
+  function waveAt(x, y, z) {
+    wOK = false;
+    if (!bDir(x, y, z)) return;
+    let ex, ey, ez;
+    if (radOnly) { ex = FAx; ey = FAy; ez = FAz; } else { ex = FEx; ey = FEy; ez = FEz; }
+    const em = Math.hypot(ex, ey, ez);
+    wTEx = wTBx = x; wTEy = wTBy = y; wTEz = wTBz = z; wOK = true;   // 場太弱時尖端 = 基點
+    if (em < 1e-30) return;
+    // B = n × E（c = 1 的單位下 |B| = |E_⊥|）
+    const bx = FNy * ez - FNz * ey, by = FNz * ex - FNx * ez, bz = FNx * ey - FNy * ex;
+    const bm = Math.hypot(bx, by, bz);
+    const t = Math.min(1, Math.max(0, (Math.log10(em * wGain) + 6.5) / 3));
+    if (t < 0.04) return;
+    const L = WLEN * t;
+    vecArrow(x, y, z, ex / em, ey / em, ez / em, L, '#ffe14a');
+    wTEx = x + ex / em * L; wTEy = y + ey / em * L; wTEz = z + ez / em * L;
+    if (bm > 1e-30) {
+      const LB = L * Math.min(1, bm / em);
+      vecArrow(x, y, z, bx / bm, by / bm, bz / bm, LB, '#4cc9ff');
+      wTBx = x + bx / bm * LB; wTBy = y + by / bm * LB; wTBz = z + bz / bm * LB;
+    }
+  }
+
+  // 包絡線：沿同一條取樣線，把各點 E／B 向量尖端連成曲線
+  const envE = [], envB = [];
+  function envBegin() { envE.length = 0; envB.length = 0; }
+  function envAdd(x, y, z) {
+    waveAt(x, y, z);
+    if (!wEnv) return;
+    if (wOK && project(wTEx, wTEy, wTEz)) envE.push(SX, SY); else envE.push(null, null);
+    if (wOK && project(wTBx, wTBy, wTBz)) envB.push(SX, SY); else envB.push(null, null);
+  }
+  // Catmull-Rom 平滑曲線（對每段連續有效的點）
+  function envStroke(arr, col) {
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const n = arr.length / 2;
+    let i = 0;
+    while (i < n) {
+      if (arr[2 * i] === null) { i++; continue; }
+      let j = i; while (j + 1 < n && arr[2 * (j + 1)] !== null) j++;
+      const X = k => arr[2 * Math.min(j, Math.max(i, k))], Y = k => arr[2 * Math.min(j, Math.max(i, k)) + 1];
+      ctx.moveTo(X(i), Y(i));
+      for (let k = i; k < j; k++) {
+        ctx.bezierCurveTo(
+          X(k) + (X(k + 1) - X(k - 1)) / 6, Y(k) + (Y(k + 1) - Y(k - 1)) / 6,
+          X(k + 1) - (X(k + 2) - X(k)) / 6, Y(k + 1) - (Y(k + 2) - Y(k)) / 6,
+          X(k + 1), Y(k + 1));
+      }
+      i = j + 1;
+    }
+    ctx.stroke();
+  }
+  function envEnd() {
+    if (!wEnv) return;
+    envStroke(envE, 'rgba(255,225,74,.8)');
+    envStroke(envB, 'rgba(76,201,255,.8)');
+  }
+
+  function drawWave() {
+    if (wplane >= 4) {   // 只沿單一軸線取樣
+      const N = 2 * WG - 1, st = 2 * WEXT / (N - 1);
+      envBegin();
+      for (let i = 0; i < N; i++) {
+        const a = -WEXT + i * st;
+        if (wplane === 4) envAdd(a, 0, 0); else if (wplane === 5) envAdd(0, a, 0); else envAdd(0, 0, a);
+      }
+      envEnd();
+      return;
+    }
+    const step = 2 * WEXT / (WG - 1);
+    const planes = wplane === 3 ? [0, 1, 2] : [wplane];
+    for (const p of planes) {
+      for (let i = 0; i < WG; i++) {
+        envBegin();
+        for (let j = 0; j < WG; j++) {
+          const a = -WEXT + i * step, b = -WEXT + j * step;
+          if (p === 0) envAdd(a, 0, b); else if (p === 1) envAdd(a, b, 0); else envAdd(0, a, b);
+        }
+        envEnd();
+      }
+    }
+  }
+
+  function drawE() {
+    const t = simT;
+    const aE = nE <= 24 ? 0.95 : 0.95 * Math.pow(24 / nE, 0.4);
+    ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(242,242,200,' + aE.toFixed(3) + ')';
+    const dirSg = sign > 0 ? 1 : -1;
+    const qOK = project(Qx, Qy, Qz), qsx = SX, qsy = SY;
+    for (let k = 0; k < nE; k++) {
+      const ux = dE[3 * k], uy = dE[3 * k + 1], uz = dE[3 * k + 2];
+      let m = 0;
+      for (let i = 0; i < count; i++) {
+        const idx = (head - i + CAP) % CAP;
+        const r = C * (t - hT[idx]); if (r > MAXR) break;
+        const vx = hVX[idx], vy = hVY[idx], vz = hVZ[idx];
+        const vu = vx * ux + vy * uy + vz * uz;
+        const s = -vu + Math.sqrt(vu * vu + C2 - (vx * vx + vy * vy + vz * vz));
+        const tau = r / C;
+        if (project(hX[idx] + tau * (vx + s * ux), hY[idx] + tau * (vy + s * uy), hZ[idx] + tau * (vz + s * uz))) {
+          sxs[m] = SX; sys[m] = SY; okv[m] = 1;
+        } else okv[m] = 0;
+        m++;
+      }
+      if (m < 2) continue;
+      strokePath(m);
+      // 箭頭
+      for (let i = 0; i < m; i++) {
+        const idx = (head - i + CAP) % CAP;
+        if ((((hN[idx] % ARROW_EVERY) + ARROW_EVERY) % ARROW_EVERY) !== 0) continue;
+        if (!okv[i]) continue;
+        const x = sxs[i], y = sys[i];
+        if (qOK && Math.hypot(x - qsx, y - qsy) < 28) continue;
+        if (x < -20 || x > W + 20 || y < -20 || y > H + 20) continue;
+        const a0 = Math.max(i - 3, 0), a1 = Math.min(i + 3, m - 1);
+        if (!okv[a0] || !okv[a1]) continue;
+        arrowHead(x, y, (sxs[a1] - sxs[a0]) * dirSg, (sys[a1] - sys[a0]) * dirSg, 7, '#ffffe0');
+      }
+    }
+  }
+
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    updateMatrix();
+    Qx = hX[head]; Qy = hY[head]; Qz = hZ[head];
+
+    drawBox();
+    if (showW) drawWave();
+    if (showB) drawB();
+    drawE();
+
+    // 電荷
+    if (project(Qx, Qy, Qz)) {
+      const qx = SX, qy = SY, rad = 13 * Math.max(0.5, Math.min(2.2, SW));
+      const g = ctx.createRadialGradient(qx - rad * 0.3, qy - rad * 0.3, rad * 0.15, qx, qy, rad * 1.05);
+      if (sign > 0) { g.addColorStop(0, '#ffb0a0'); g.addColorStop(1, '#d02a1f'); }
+      else { g.addColorStop(0, '#9bb8ff'); g.addColorStop(1, '#1f3fd0'); }
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(qx, qy, rad, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(qx - rad * 0.46, qy - rad * 0.11, rad * 0.92, rad * 0.22);
+      if (sign > 0) ctx.fillRect(qx - rad * 0.11, qy - rad * 0.46, rad * 0.22, rad * 0.92);
+
+      // 速度向量
+      if (showV) {
+        const L = 0.5, vx = hVX[head], vy = hVY[head], vz = hVZ[head];
+        if (Math.hypot(vx, vy, vz) > 2 && project(Qx + vx * L, Qy + vy * L, Qz + vz * L)) {
+          const ex = SX, ey = SY;
+          ctx.strokeStyle = '#3fe05a'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(ex, ey); ctx.stroke();
+          arrowHead(ex, ey, ex - qx, ey - qy, 11, '#3fe05a');
+        }
+      }
+    }
+    if (showV) {
+      const bx = 130, by = H - 40, len = C * 0.5 * zoom;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + len, by); ctx.stroke();
+      arrowHead(bx + len, by, 1, 0, 11, '#fff');
+      ctx.fillStyle = '#fff'; ctx.font = '16px "Microsoft JhengHei","PingFang TC",sans-serif';
+      ctx.fillText('光速（參考長度）', bx, by - 12);
+    }
+
+    // 座標軸小圖
+    const gx = 60, gy = H - 70, L = 34;
+    const axes = [[m00, -m10, '#ff6b6b', 'X'], [0, -m11, '#6bff8a', 'Y'], [m02, -m12, '#6bb5ff', 'Z']];
+    ctx.font = '13px sans-serif'; ctx.lineWidth = 2;
+    for (const [dx, dy, col, lab] of axes) {
+      ctx.strokeStyle = col; ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + dx * L, gy + dy * L); ctx.stroke();
+      ctx.fillText(lab, gx + dx * (L + 8) - 4, gy + dy * (L + 8) + 4);
+    }
+  }
+
+  // ---- 主迴圈 ----
+  let last = performance.now(), acc = 0;
+  function frame(now) {
+    let dt = (now - last) / 1000; last = now;
+    if (dt > 0.1) dt = 0.1;
+    if (autoRot && !orbit && !dragging) yaw += 0.25 * dt;
+    if (!paused) { acc += dt; while (acc >= DT) { step(); acc -= DT; } }
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---- 滑鼠 / 觸控 ----
+  const isManual = () => mode === 'friction' || mode === 'nofriction';
+  function pos(e) { const r = cvs.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+  function hitCharge(x, y) {
+    return project(px, py, pz) && Math.hypot(x - SX, y - SY) < Math.max(30, 20 * SW);
+  }
+  cvs.addEventListener('pointerdown', e => {
+    const [x, y] = pos(e);
+    cvs.setPointerCapture(e.pointerId);
+    if (isManual() && hitCharge(x, y)) {
+      dragging = true; offX = SX - x; offY = SY - y;
+      dragZ = m20 * px + m21 * py + m22 * pz; tx = px; ty = py; tz = pz;
+      return;
+    }
+    orbit = true; lastX = x; lastY = y;
+  });
+  cvs.addEventListener('pointermove', e => {
+    const [x, y] = pos(e);
+    if (dragging) {
+      const w = zoom * CAMD / (CAMD - dragZ);
+      const X = (x + offX - cx) / w, Y = -(y + offY - cy) / w, Z = dragZ;
+      tx = clampBox(m00 * X + m10 * Y + m20 * Z);
+      ty = clampBox(m11 * Y + m21 * Z);
+      tz = clampBox(m02 * X + m12 * Y + m22 * Z);
+    } else if (orbit) {
+      yaw += (x - lastX) * 0.008;
+      pitch = Math.max(-1.5, Math.min(1.5, pitch + (y - lastY) * 0.008));
+      lastX = x; lastY = y;
+    } else {
+      cvs.style.cursor = (isManual() && hitCharge(x, y)) ? 'grab' : 'default';
+    }
+  });
+  const endDrag = () => { dragging = false; orbit = false; };
+  cvs.addEventListener('pointerup', endDrag);
+  cvs.addEventListener('pointercancel', endDrag);
+  cvs.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoom = Math.max(0.3, Math.min(2.5, zoom * Math.exp(-e.deltaY * 0.001)));
+    $('zoom').value = zoom; updateUI();
+  }, { passive: false });
+
+  // ---- 控制面板 ----
+  function updateUI() {
+    $('vAmp').textContent = amp;
+    $('vFreq').textContent = freq.toFixed(2) + ' Hz';
+    $('vSpeed').textContent = speedFrac.toFixed(2) + ' c';
+    $('vDur').textContent = duration.toFixed(2) + ' s';
+    $('vE').textContent = nE + ' 條';
+    $('vB').textContent = nB + ' 條';
+    $('vZoom').textContent = zoom.toFixed(2) + '×';
+    $('slAxis').classList.toggle('hide', isManual());
+    $('axisLabel').textContent = mode === 'circular' ? '旋轉軸（圓形軌道的法線）' : '運動軸向';
+    $('slAmp').classList.toggle('hide', !(mode === 'sin' || mode === 'linear'));
+    $('slFreq').classList.toggle('hide', mode !== 'sin');
+    $('slSpeed').classList.toggle('hide', !(mode === 'linear' || mode === 'circular' || mode === 'bump'));
+    $('slDur').classList.toggle('hide', mode !== 'bump');
+    $('stop').classList.toggle('hide', !isManual());
+    $('slB').classList.toggle('hide', !showB);
+    $('slW').classList.toggle('hide', !showW);
+    $('vG').textContent = wGain.toFixed(1) + '×';
+    $('vN').textContent = wplane >= 4 ? (2 * WG - 1) + ' 點/線' : WG + '×' + WG;
+  }
+  document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
+    mode = r.value; updateUI(); restart();
+  }));
+  document.querySelectorAll('input[name=sign]').forEach(r => r.addEventListener('change', () => {
+    sign = +r.value;
+  }));
+  $('axis').onchange = e => { axis = +e.target.value; restart(); };
+  $('amp').oninput = e => { amp = +e.target.value; updateUI(); };
+  $('freq').oninput = e => { freq = +e.target.value; updateUI(); };
+  $('speed').oninput = e => { speedFrac = +e.target.value; updateUI(); };
+  $('dur').oninput = e => { duration = +e.target.value; updateUI(); };
+  $('nE').oninput = e => { nE = +e.target.value; dE = fib(nE); updateUI(); };
+  $('nB').oninput = e => { nB = +e.target.value; dB = fib(nB); updateUI(); };
+  $('zoom').oninput = e => { zoom = +e.target.value; updateUI(); };
+  $('showB').onchange = e => { showB = e.target.checked; updateUI(); };
+  $('showW').onchange = e => { showW = e.target.checked; updateUI(); };
+  $('wplane').onchange = e => { wplane = +e.target.value; };
+  $('wn').oninput = e => { WG = +e.target.value; updateUI(); };
+  $('wplane').addEventListener('change', updateUI);
+  $('wEnv').onchange = e => { wEnv = e.target.checked; };
+  $('radOnly').onchange = e => { radOnly = e.target.checked; };
+  $('gain').oninput = e => { wGain = +e.target.value; updateUI(); };
+  $('autoRot').onchange = e => { autoRot = e.target.checked; };
+  $('showV').onchange = e => { showV = e.target.checked; };
+  $('pause').onchange = e => { paused = e.target.checked; };
+  $('stop').onclick = () => { mvx = mvy = mvz = 0; };
+  $('restart').onclick = () => restart();
+  $('viewReset').onclick = () => { yaw = 0.6; pitch = 0.35; autoZoom(); };
+  $('reset').onclick = () => {
+    mode = 'friction'; axis = 1; amp = 60; freq = 0.6; speedFrac = 0.5; duration = 0.6;
+    nE = 24; nB = 12; sign = -1; showB = true; showV = false; paused = false; autoRot = false;
+    showW = true; radOnly = true; wplane = 0; wGain = 1; wEnv = true; WG = 13;
+    $('showW').checked = true; $('radOnly').checked = true; $('wEnv').checked = true; $('wn').value = 13; $('wplane').value = 0; $('gain').value = 1;
+    dE = fib(nE); dB = fib(nB);
+    document.querySelector('input[name=mode][value=friction]').checked = true;
+    document.querySelector('input[name=sign][value="-1"]').checked = true;
+    $('axis').value = 1; $('amp').value = amp; $('freq').value = freq; $('speed').value = speedFrac; $('dur').value = duration;
+    $('nE').value = nE; $('nB').value = nB;
+    $('showB').checked = true; $('showV').checked = false; $('pause').checked = false; $('autoRot').checked = false;
+    yaw = 0.6; pitch = 0.35; autoZoom(); restart();
+  };
+
+  window.addEventListener('resize', resize);
+  resize();
+  autoZoom();
+  updateUI();
+  restart();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
